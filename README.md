@@ -6,7 +6,7 @@
 ### 1 安装
 
 ```shell
-python install mbs
+python install mbs-cn
 ```
 
 ### 2 命令

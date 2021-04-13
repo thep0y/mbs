@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: setup.py (c) 2021
 # @Created:  2021-04-13 13:35:37
-# @Modified: 2021-04-13 13:43:22
+# @Modified: 2021-04-13 17:26:49
 
 import codecs
 import mbs
@@ -13,7 +13,7 @@ from setuptools import setup, find_packages
 
 with codecs.open("README.md", "r", "utf-8") as fd:
     setup(
-        name="mbs",
+        name="mbs-cn",
         version=mbs.__version__,
         description='''
         博客管理器，可以管理多个博客的文章
