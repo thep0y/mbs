@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: __init__.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-04-13 16:52:26
+# @Modified: 2021-04-14 16:13:59
 
 import sys
 
@@ -14,7 +14,7 @@ from mbs.blogs import logger
 from mbs.utils.common import read_post_from_file, get_md5_of_file
 from mbs.manager import AllBlogsManager
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 
 def _build_parser():

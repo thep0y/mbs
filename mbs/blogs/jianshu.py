@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: jianshu.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-04-13 17:04:05
+# @Modified: 2021-04-14 16:13:49
 
 import sys
 import json
@@ -196,7 +196,7 @@ class Jianshu:
         sys.exit(1)
 
     def __select_category_for_post(self, postid: int):
-        from utils.database import DataBase
+        from mbs.utils.database import DataBase
         db = DataBase()
         sql = "SELECT c.jianshu_id FROM categories as c WHERE c.id = (SELECT p.category_id FROM posts p WHERE p.jianshu_id = %d)" % postid
         row = db.execute(sql).fetchone()

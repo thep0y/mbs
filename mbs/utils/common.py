@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: common.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-04-13 16:30:32
+# @Modified: 2021-04-14 08:54:49
 
 import sys
 import os
@@ -94,9 +94,7 @@ def save_categories():
 
 
 if __name__ == '__main__':
-    # print(
-    #     get_md5_of_file(
-    #         "/Volumes/MAC专用/markdown/System/浅谈select、poll和epoll.md"))
+    print(get_md5_of_file("/Volumes/MAC专用/markdown/Go/Golang-分布式系统.md"))
     # print(get_md5_of_file("/Volumes/MAC专用/markdown/System/分布式系统的理论发展.md"))
-    cookies = input("cookies: ")
-    parse_cookies(cookies)
+    # cookies = input("cookies: ")
+    # parse_cookies(cookies)
