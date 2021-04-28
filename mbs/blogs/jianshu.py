@@ -4,10 +4,12 @@
 # @Email: thepoy@163.com
 # @File Name: jianshu.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-04-14 16:13:49
+# @Modified: 2021-04-28 17:04:39
 
 import sys
+import os
 import json
+import asyncio
 
 import requests
 
@@ -25,6 +27,15 @@ Categories = List[Category]
 
 
 def parse_response(struct: BaseStruct, resp: Response) -> BaseStruct:
+    """解析响应
+
+    Args:
+        struct (BaseStruct): 响应对应的结构体
+        resp (Response): 响应
+
+    Returns:
+        BaseStruct: 解析过的结构体
+    """
     if resp.status_code == 200:
         return struct(resp.json())
     else:
@@ -41,10 +52,8 @@ def parse_response(struct: BaseStruct, resp: Response) -> BaseStruct:
 class Jianshu:
     """简书 api"""
     headers = {
-        "Accept":
-        'application/json',
-        'User-Agent':
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:87.0) Gecko/20100101 Firefox/87.0',
+        "Accept": 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:87.0) Gecko/20100101 Firefox/87.0',
     }
 
     def __init__(self, cookies: Optional[dict] = None):
@@ -60,8 +69,7 @@ class Jianshu:
                 self.cookies = json.loads(f.read())["jianshu"]["cookies"]
         except FileNotFoundError:
             raise ConfigFileNotFoundError(
-                "config file is not found, you should input the cookies of jianshu to create config file."
-            )
+                "config file is not found, you should input the cookies of jianshu to create config file.")
 
     def __save_config_to_local_file(self):
         try:
@@ -75,34 +83,24 @@ class Jianshu:
             with open(CONFIG_FILE_PATH, "w") as f:
                 f.write(json.dumps({"jianshu": {"cookies": self.cookies}}))
 
-    def __get(self, url: str):
-        return requests.get(url, headers=self.headers, cookies=self.cookies)
+    def __get(self, url: str, headers: Optional[dict] = None) -> Response:
+        if not headers:
+            headers = self.headers
+        return requests.get(url, headers=headers, cookies=self.cookies)
 
-    def __post(self,
-               url: str,
-               data: Optional[dict] = None,
-               headers: Optional[dict] = None):
+    def __post(self, url: str, data: Optional[dict] = None, headers: Optional[dict] = None) -> Response:
         if not headers:
             headers = self.headers
         if data:
-            return requests.post(url,
-                                 headers=headers,
-                                 cookies=self.cookies,
-                                 json=data)
+            return requests.post(url, headers=headers, cookies=self.cookies, json=data)
         else:
             return requests.post(url, headers=headers, cookies=self.cookies)
 
-    def __put(self,
-              url: str,
-              data: Optional[dict],
-              headers: Optional[dict] = None):
+    def __put(self, url: str, data: Optional[dict], headers: Optional[dict] = None) -> Response:
         if not headers:
             headers = self.headers
 
-        return requests.put(url,
-                            headers=headers,
-                            cookies=self.cookies,
-                            json=data)
+        return requests.put(url, headers=headers, cookies=self.cookies, json=data)
 
     def get_categories(self) -> Optional[Categories]:
         url = "https://www.jianshu.com/author/notebooks"
@@ -110,16 +108,14 @@ class Jianshu:
         if resp.status_code == 200:
             categories = []
             for i in resp.json():
-                categories.append(
-                    Category({
-                        "id": i["id"],
-                        "name": i["name"],
-                    }))
+                categories.append(Category({
+                    "id": i["id"],
+                    "name": i["name"],
+                }))
             return categories
         return None
 
-    def __create_new_post(self, notebook_id: Union[str, int],
-                          title: str) -> Optional[dict]:
+    def __create_new_post(self, notebook_id: Union[str, int], title: str) -> Optional[dict]:
         url = "https://www.jianshu.com/author/notes"
 
         data = {
@@ -130,18 +126,13 @@ class Jianshu:
         resp = self.__post(url, data)
         return parse_response(Created, resp)
 
-    def __put_post(self,
-                   postid: int,
-                   title: str,
-                   content: str,
-                   version: int = 1):
+    def __put_post(self, postid: int, title: str, content: str, version: int = 1):
         url = "https://www.jianshu.com/author/notes/%d" % postid
-        data = {
-            "id": str(postid),
-            "autosave_control": version,
-            "title": title,
-            "content": content
-        }
+
+        # 将 content 中所有的图片上传到简书，用简书反回的图片链接进行替换
+        content = asyncio.get_event_loop().run_until_complete(self._replace_all_images(content))
+
+        data = {"id": str(postid), "autosave_control": version, "title": title, "content": content}
 
         resp = self.__put(url, data)
         return parse_response(Updated, resp)
@@ -160,8 +151,7 @@ class Jianshu:
         url = f"https://www.jianshu.com/author/notes/{postid}/content"
         return self.__get(url).json()["content"]
 
-    def new_post(self, notebook_id: Union[str, int], title: str,
-                 content: str) -> str:
+    def new_post(self, notebook_id: Union[str, int], title: str, content: str) -> str:
         created = self.__create_new_post(notebook_id, title)
 
         self.__put_new_post(created["id"], title, content)
@@ -217,8 +207,7 @@ class Jianshu:
             logger.fatal(f"简书添加新分类出错：{error.error}")
             sys.exit(1)
 
-    def update_category(self, category_id: Union[str, int],
-                        category: str) -> bool:
+    def update_category(self, category_id: Union[str, int], category: str) -> bool:
         url = f"https://www.jianshu.com/author/notebooks/{category_id}"
         data = {"name": category}
 
@@ -228,6 +217,86 @@ class Jianshu:
     def delete_category(self, category_id: Union[str, int]) -> int:
         url = f"https://www.jianshu.com/author/notebooks/{category_id}/soft_destroy"
         return self.__post(url).status_code
+
+    async def _replace_all_images(self, content: str) -> str:
+        import re
+        from mbs.utils.database import DataBase
+
+        db = DataBase()
+
+        imgs = re.findall(r"!\[.+?\]\((.+?)\)", content)
+
+        imgs = list(set(imgs))
+
+        amount = len(imgs)
+
+        new_imgs = []
+        tasks = []
+
+        for i in range(amount):
+            new_img = db.is_uploaded(imgs[i])
+            if new_img:
+                logger.info("外链图片已向简书上传过")
+                new_imgs.append((imgs[i], new_img))
+            else:
+                tasks.append(self.upload_image(imgs[i], db))
+
+        logger.info("正在向简书上传文档内的图片...")
+        uploaded_imgs = await asyncio.gather(*tasks, return_exceptions=True)
+        logger.info("已上传所有图片")
+
+        new_imgs.extend(uploaded_imgs)
+
+        new_imgs = set(new_imgs)
+        for img in imgs:
+            for new_img in new_imgs:
+                if new_img[0] == img:
+                    content = content.replace(img, new_img[1] + "?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240")
+                    new_imgs.remove(new_img)
+                    break
+
+        return content
+
+    def __get_token_and_key_of_local_image(self, filename: str) -> Tuple[str, str]:
+        url = f"https://www.jianshu.com/upload_images/token.json?filename={filename}"
+        headers = self.headers.copy()
+        headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+        resp = self.__get(url, headers=headers)
+        return resp.json()["token"], resp.json()["key"]
+
+    async def upload_image(self, path_or_url: str, db) -> Tuple[str, str]:
+        if path_or_url.startswith("http"):
+            # TODO: 对所有远程图片增加缓存判断。第一次上传成功就添加到缓存数据库中，
+            # 之后每次上传之前先从缓存数据库中获取链接，获取失败的才执行上传操作。
+            # 这样做能减少上传图片时的等待时间，保证每一张上传过的图片不会重新上传。
+            url = "https://www.jianshu.com/upload_images/fetch"
+            resp = self.__post(url, data={"url": path_or_url})
+        else:
+            if not os.path.exists(path_or_url):
+                raise FileNotFoundError(f"没有找到 {path_or_url}")
+
+            filename = os.path.basename(path_or_url).replace(" ", "_")
+
+            token, key = self.__get_token_and_key_of_local_image(filename)
+
+            # 根据 token 和 key 上传图片
+            url = "https://upload.qiniup.com/"
+            params = {
+                "token": (None, token),
+                "key": (None, key),
+                "file": (filename, open(path_or_url, "rb")),
+                "x:protocol": "https"
+            }
+            resp = requests.post(url, files=params)
+        try:
+            if "url" in resp.json():
+                logger.info("图片上传成功，本地或远程地址：%s，上传到简书后返回的地址：%s", path_or_url, resp.json()["url"])
+                db.uploaded(path_or_url, resp.json()["url"])
+                logger.info("已将上传的图片链接保存到数据库")
+            return (path_or_url, resp.json()["url"])
+        except KeyError:
+            logger.fatal("上传图片时出错：%s", ", ".join([e["message"] for e in resp.json()["error"]]))
+            sys.exit(1)
 
     def __str__(self):
         return "简书"

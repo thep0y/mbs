@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: common.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-04-14 08:54:49
+# @Modified: 2021-04-28 17:05:14
 
 import sys
 import os
@@ -67,10 +67,8 @@ def scan_folder(folder_path: str) -> dict:
         item = []
         for file in _get_all_markdown_files(os.path.join(folder_path, folder)):
             item.append({
-                "file_name":
-                file,
-                "md5":
-                get_md5_of_file(os.path.join(folder_path, folder, file)),
+                "file_name": file,
+                "md5": get_md5_of_file(os.path.join(folder_path, folder, file)),
             })
         all_files[folder] = item
     return all_files
@@ -81,11 +79,7 @@ def find_all_files(folder: str) -> dict:
     current_files = {}
     for c, fs in all_files.items():
         for f in fs:
-            current_files.update(
-                {f["file_name"]: {
-                     "md5": f["md5"],
-                     "category": c
-                 }})
+            current_files.update({f["file_name"]: {"md5": f["md5"], "category": c}})
     return current_files
 
 
@@ -94,7 +88,7 @@ def save_categories():
 
 
 if __name__ == '__main__':
-    print(get_md5_of_file("/Volumes/MAC专用/markdown/Go/Golang-分布式系统.md"))
+    print(get_md5_of_file("/Volumes/MAC专用/markdown/Go/Golang调度器和GMP模型.md"))
     # print(get_md5_of_file("/Volumes/MAC专用/markdown/System/分布式系统的理论发展.md"))
     # cookies = input("cookies: ")
     # parse_cookies(cookies)

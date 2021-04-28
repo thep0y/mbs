@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: database.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-04-13 17:01:18
+# @Modified: 2021-04-28 17:05:07
 
 import sys
 import sqlite3
@@ -48,6 +48,16 @@ class DataBase:
         """
         self.execute(sql)
 
+        # 已上传图片
+        sql = """
+        CREATE TABLE IF NOT EXISTS `uploaded_images` (
+            id INTEGER PRIMARY KEY NOT NULL,
+            raw_url VARCHAR NOT NULL UNIQUE,
+            jianshu_url VARCHAR NOT NULL UNIQUE
+        );
+        """
+        self.execute(sql)
+
         self.commit()
 
     def get_categories(self) -> List[str]:
@@ -63,10 +73,7 @@ class DataBase:
             return row[0], row[2], row[3]
         return None
 
-    def insert_category(self,
-                        category: str,
-                        jianshu_id: Optional[str] = None,
-                        cnblogs_id: Optional[str] = None):
+    def insert_category(self, category: str, jianshu_id: Optional[str] = None, cnblogs_id: Optional[str] = None):
         sql = "INSERT INTO `categories`(`category`, `jianshu_id`, `cnblogs_id`) VALUES (?, ?, ?);"
         try:
             self.execute(sql, category, jianshu_id, cnblogs_id)
@@ -75,10 +82,7 @@ class DataBase:
             logger.warning("重复的分类：%s" % category)
             self.rollback()
 
-    def update_category(self,
-                        category: str,
-                        jianshu_id: Optional[str] = None,
-                        cnblogs_id: Optional[str] = None):
+    def update_category(self, category: str, jianshu_id: Optional[str] = None, cnblogs_id: Optional[str] = None):
         if jianshu_id and not cnblogs_id:
             sql = "UPDATE `categories` SET `jianshu_id` = {%s};" % jianshu_id
         elif cnblogs_id and not jianshu_id:
@@ -116,11 +120,37 @@ class DataBase:
         rows = self.execute(sql).fetchall()
         return rows
 
-    def insert_post(self, title: str, md5: str, jianshu_id: int,
-                    cnblogs_id: int, category_id: int):
+    def insert_post(self, title: str, md5: str, jianshu_id: int, cnblogs_id: int, category_id: int):
         sql = "INSERT INTO `posts` (title, md5, jianshu_id, cnblogs_id, category_id) VALUES (?, ?, ?, ?, ?);"
         self.execute(sql, title, md5, jianshu_id, cnblogs_id, category_id)
         self.commit()
+
+    def uploaded(self, raw_url: str, jianshu_url: str):
+        """将上传成功的图片原链接和新链接保存起来
+
+        Args:
+            raw_url (str): 原链接 / 外链
+            jianshu_url (str): 简书图床中的链接
+        """
+        sql = "INSERT INTO `uploaded_images` VALUES (NULL, ?, ?)"
+        self.execute(sql, raw_url, jianshu_url)
+        self.commit()
+
+    def is_uploaded(self, raw_url: str) -> Optional[str]:
+        """图片是否上传过
+        如果能在数据库中找到对应的链接，说明图片上传过，不需要再上传，直接返回之前上传的图床的链接。
+
+        Args:
+            raw_url (str): 外链
+
+        Returns:
+            Optional[str]: 简书链接或 None
+        """
+        sql = "SELECT `jianshu_url` FROM `uploaded_images` WHERE `raw_url` = '%s'" % raw_url
+        row = self.execute(sql).fetchone()
+        if not row:
+            return None
+        return row[0]
 
     def execute(self, sql, *args):
         return self.cursor.execute(sql, args)

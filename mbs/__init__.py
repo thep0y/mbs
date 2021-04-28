@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: __init__.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-04-14 16:13:59
+# @Modified: 2021-04-28 17:06:06
 
 import sys
 
@@ -14,49 +14,24 @@ from mbs.blogs import logger
 from mbs.utils.common import read_post_from_file, get_md5_of_file
 from mbs.manager import AllBlogsManager
 
-__version__ = "0.0.2"
+__version__ = "0.0.4"
 
 
 def _build_parser():
-    parser = argparse.ArgumentParser(description='博客管理器',
-                                     prog="mbs",
-                                     add_help=False)
+    parser = argparse.ArgumentParser(description='博客管理器', prog="mbs", add_help=False)
 
     parser.add_argument('-h', '--help', action='help', help='显示当前帮助信息，然后退出')
-    parser.add_argument('-v',
-                        '--version',
-                        action='version',
-                        help="显示 mbs 版本号，然后退出",
-                        version=__version__)
-    parser.add_argument("-cs",
-                        "--categories",
-                        help="显示所有分类",
-                        action="store_true")
+    parser.add_argument('-v', '--version', action='version', help="显示 mbs 版本号，然后退出", version=__version__)
+    parser.add_argument("-cs", "--categories", help="显示所有分类", action="store_true")
     parser.add_argument("-n",
                         "--new-post",
                         nargs=2,
                         metavar=("CATEGORY", "MARKDOWN_FILE_PATH"),
                         help="要上传的 markdown 文件的分类和路径")
-    parser.add_argument("-d",
-                        "--delete",
-                        metavar="TITLE",
-                        help="要删除的文章标题",
-                        type=str)
-    parser.add_argument("-sc",
-                        "--scan-changed-files",
-                        metavar="FOLDER",
-                        help="扫描目标文件中所有有变化的文件",
-                        type=str)
-    parser.add_argument("-uo",
-                        "--update-one",
-                        metavar="PATH",
-                        help="更新一个文件",
-                        type=str)
-    parser.add_argument("-ua",
-                        "--update-all",
-                        metavar="FOLDER",
-                        help="更新指定目录中的所有文件",
-                        type=str)
+    parser.add_argument("-d", "--delete", metavar="TITLE", help="要删除的文章标题", type=str)
+    parser.add_argument("-sc", "--scan-changed-files", metavar="FOLDER", help="扫描目标文件中所有有变化的文件", type=str)
+    parser.add_argument("-uo", "--update-one", metavar="PATH", help="更新一个文件", type=str)
+    parser.add_argument("-ua", "--update-all", metavar="FOLDER", help="更新指定目录中的所有文件", type=str)
     return parser
 
 

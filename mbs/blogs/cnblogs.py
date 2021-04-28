@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: cnblogs.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-04-13 17:03:06
+# @Modified: 2021-04-28 17:05:04
 
 import os
 import sys
@@ -101,10 +101,7 @@ def create_post(title: str,
 
 class CnblogsMetaWeblog:
     """博客园 api"""
-    def __init__(self,
-                 blog_name: Optional[str] = None,
-                 username: Optional[str] = None,
-                 password: Optional[str] = None):
+    def __init__(self, blog_name: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None):
         """初始化函数
 
         Args:
@@ -113,22 +110,16 @@ class CnblogsMetaWeblog:
             password (Optional[str], optional): 密码
         """
 
-        if not self._config_file_exists() and (not blog_name or not username
-                                               or not password):
-            raise ConfigFileNotFoundError(
-                "config file not exists, you should input blogName, username, and password"
-            )
+        if not self._config_file_exists() and (not blog_name or not username or not password):
+            raise ConfigFileNotFoundError("config file not exists, you should input blogName, username, and password")
 
         config = self._read_config()
 
         if not config:
             if not blog_name or not username or not password:
-                raise ConfigNotFoundError(
-                    "config file is empty, you should input blogName, username, and password"
-                )
+                raise ConfigNotFoundError("config file is empty, you should input blogName, username, and password")
             else:
-                self._server = xml.ServerProxy(
-                    "https://rpc.cnblogs.com/metaweblog/%s" % blog_name)
+                self._server = xml.ServerProxy("https://rpc.cnblogs.com/metaweblog/%s" % blog_name)
                 self._blogger = self._server.blogger
                 self.config = BlogInfo({
                     "blogName": blog_name,
@@ -137,8 +128,7 @@ class CnblogsMetaWeblog:
                 })
                 self._save_blog_config()
         else:
-            self._server = xml.ServerProxy(
-                "https://rpc.cnblogs.com/metaweblog/%s" % config["blogName"])
+            self._server = xml.ServerProxy("https://rpc.cnblogs.com/metaweblog/%s" % config["blogName"])
             self._blogger = self._server.blogger
             try:
                 config = BlogInfo(config)
@@ -157,9 +147,7 @@ class CnblogsMetaWeblog:
             Optional[dict]: 博客信息
         """
         try:
-            blog_info = self._blogger.getUsersBlogs(self.config.blogName,
-                                                    self.config.username,
-                                                    self.config.password)
+            blog_info = self._blogger.getUsersBlogs(self.config.blogName, self.config.username, self.config.password)
         except Fault as e:
             logger.fatal(e)
             sys.exit(1)
@@ -236,14 +224,10 @@ class CnblogsMetaWeblog:
         """
         if isinstance(postid, int):
             postid = str(postid)
-        return self._blogger.deletePost(self.config.blogName, postid,
-                                        self.config.username,
-                                        self.config.password, recoverable)
+        return self._blogger.deletePost(self.config.blogName, postid, self.config.username, self.config.password,
+                                        recoverable)
 
-    def edit_post(self,
-                  postid: Union[str, int],
-                  post: Post,
-                  publish: bool = True):
+    def edit_post(self, postid: Union[str, int], post: Post, publish: bool = True):
         """编辑文章
 
         Args:
@@ -256,9 +240,7 @@ class CnblogsMetaWeblog:
         """
         if isinstance(postid, int):
             postid = str(postid)
-        return self._meta_weblog.editPost(postid, self.config.username,
-                                          self.config.password, dict(post),
-                                          publish)
+        return self._meta_weblog.editPost(postid, self.config.username, self.config.password, dict(post), publish)
 
     def get_categories(self) -> List[dict]:
         """获取全部分类
@@ -266,16 +248,14 @@ class CnblogsMetaWeblog:
         Returns:
             list: 所有分类的详细信息
         """
-        resp_categories = self._meta_weblog.getCategories(
-            self.config.blogid, self.config.username, self.config.password)
+        resp_categories = self._meta_weblog.getCategories(self.config.blogid, self.config.username,
+                                                          self.config.password)
         categories = []
         for category in resp_categories:
             if category["title"].startswith("[随笔分类]"):
                 categories.append({
-                    "id":
-                    category["categoryid"],
-                    "name":
-                    category["title"].replace("[随笔分类]", ""),
+                    "id": category["categoryid"],
+                    "name": category["title"].replace("[随笔分类]", ""),
                 })
         return categories
 
@@ -290,8 +270,7 @@ class CnblogsMetaWeblog:
         """
         if isinstance(postid, int):
             postid = str(postid)
-        return self._meta_weblog.getPost(postid, self.config.username,
-                                         self.config.password)
+        return self._meta_weblog.getPost(postid, self.config.username, self.config.password)
 
     def get_recent_posts(self, count: int):
         """获取指定数量的最近发布的文章
@@ -302,9 +281,7 @@ class CnblogsMetaWeblog:
         Returns:
             List[Post]: 文章列表
         """
-        return self._meta_weblog.getRecentPosts(self.config.blogid,
-                                                self.config.username,
-                                                self.config.password, count)
+        return self._meta_weblog.getRecentPosts(self.config.blogid, self.config.username, self.config.password, count)
 
     def new_media_object(self, file_path: str):
         """上传媒体文件，其实只能上传图片
@@ -315,6 +292,9 @@ class CnblogsMetaWeblog:
         Returns:
             dict: 成功上传的图片的链接
         """
+
+        # TODO: 如果是远程图片，需要下载到本地后再上传
+
         with open(file_path, "rb") as fb:
             fd = {
                 "bits": fb.read(),
@@ -323,9 +303,7 @@ class CnblogsMetaWeblog:
             }
         file_data = FileData(fd)
         try:
-            return self._meta_weblog.newMediaObject(self.config.blogid,
-                                                    self.config.username,
-                                                    self.config.password,
+            return self._meta_weblog.newMediaObject(self.config.blogid, self.config.username, self.config.password,
                                                     dict(file_data))
         except Fault as e:
             logger.fatal(e)
@@ -340,9 +318,7 @@ class CnblogsMetaWeblog:
         Returns:
             str: 文章 id
         """
-        return self._meta_weblog.newPost(self.config.blogid,
-                                         self.config.username,
-                                         self.config.password, dict(post),
+        return self._meta_weblog.newPost(self.config.blogid, self.config.username, self.config.password, dict(post),
                                          True)
 
     def new_category(self,
@@ -369,8 +345,7 @@ class CnblogsMetaWeblog:
         }
         remove_none(wp)
         wp = WpCategory(wp)
-        return self._wp.newCategory(self.config.blogid, self.config.username,
-                                    self.config.password, dict(wp))
+        return self._wp.newCategory(self.config.blogid, self.config.username, self.config.password, dict(wp))
 
     def __str__(self):
         return "博客园"

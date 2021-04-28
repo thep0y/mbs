@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 # @Author: thepoy
 # @Email: thepoy@163.com
-# @File Name: setup.py (c) 2021
+# @File Name: setup.py
 # @Created:  2021-04-13 13:35:37
-# @Modified: 2021-04-14 08:52:49
+# @Modified: 2021-04-28 17:06:18
 
 import codecs
 import mbs

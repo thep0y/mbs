@@ -2,12 +2,13 @@
 # -*- coding: utf-8 -*-
 # @Author: thepoy
 # @Email: thepoy@163.com
-# @File Name: manager.py (c) 2021
+# @File Name: manager.py
 # @Created:  2021-04-13 14:57:51
-# @Modified: 2021-04-13 17:10:46
+# @Modified: 2021-04-28 17:06:13
 
 import sys
 import os
+import time
 
 from typing import Union
 
@@ -23,9 +24,7 @@ def input_auth_info_of_cnblogs() -> CnblogsMetaWeblog:
     blog_name = input("请输入博客园的博客名：")
     username = input("请输入博客园用户名：")
     password = input("请输入博客园密码：")
-    return CnblogsMetaWeblog(blog_name=blog_name,
-                             username=username,
-                             password=password)
+    return CnblogsMetaWeblog(blog_name=blog_name, username=username, password=password)
 
 
 class AllBlogsManager:
@@ -56,12 +55,10 @@ class AllBlogsManager:
         jianshu_category_id = self.jianshu.new_category(category_name)
         cnblogs_category_id = self.cnblogs.new_category(category_name)
 
-        self.db.insert_category(category_name, jianshu_category_id,
-                                cnblogs_category_id)
+        self.db.insert_category(category_name, jianshu_category_id, cnblogs_category_id)
         logger.info(f"已创建新的分类：{category_name}")
 
-    def update_category(self, category_id: Union[str, int],
-                        category_name: str):
+    def update_category(self, category_id: Union[str, int], category_name: str):
         pass
 
     def delete_category(self, ategory_name: str):
@@ -85,10 +82,8 @@ class AllBlogsManager:
         # 只向简书中添加文章
         # cnblogs_id = 14588389
 
-        self.db.insert_post(title, md5, int(jianshu_id), int(cnblogs_id),
-                            ids[0])
-        logger.info("已上传 “%s.md” 到所有博客 - [%s, %s] 的 “%s” 分类中" %
-                    (title, self.jianshu, self.cnblogs, category))
+        self.db.insert_post(title, md5, int(jianshu_id), int(cnblogs_id), ids[0])
+        logger.info("已上传 “%s.md” 到所有博客 - [%s, %s] 的 “%s” 分类中" % (title, self.jianshu, self.cnblogs, category))
 
     def update_post(self, title: str, content: str, md5: str):
         post_id, jianshu_id, cnblogs_id = self.db.select_post(title)
@@ -108,17 +103,21 @@ class AllBlogsManager:
     def update_all_posts(self, folder: str):
         current_files = find_all_files(folder)
 
+        count = 0
+
         rows = self.db.select_md5_of_all_posts()
         for row in rows:
             id_, title, md5, jianshu_id, cnblogs_id, category_id = row
             try:
                 if current_files[title + ".md"]["md5"] != md5:
-                    file_path = os.path.join(
-                        folder, current_files[title + ".md"]["category"],
-                        title + ".md")
+                    count += 1
+                    if count > 1:
+                        # 简书不能发布频繁，当有多篇文章需要更新时，从第二篇开始，每次更新前等待 3 秒
+                        # TODO: 3 秒可能不够用，以后再遇到频繁错误，适当增加等待时间∏
+                        time.sleep(3)
+                    file_path = os.path.join(folder, current_files[title + ".md"]["category"], title + ".md")
                     content = read_post_from_file(file_path)[1]
-                    self.update_post(title, content,
-                                     current_files[title + ".md"]["md5"])
+                    self.update_post(title, content, current_files[title + ".md"]["md5"])
             except KeyError:
                 logger.error(f"博客中没有《{title}》，可能已被删除")
 
