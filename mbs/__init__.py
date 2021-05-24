@@ -4,17 +4,17 @@
 # @Email: thepoy@163.com
 # @File Name: __init__.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-04-28 17:06:06
+# @Modified: 2021-05-24 12:30:46
 
 import sys
-
+import asyncio
 import argparse
 
-from mbs.blogs import logger
 from mbs.utils.common import read_post_from_file, get_md5_of_file
 from mbs.manager import AllBlogsManager
+from mbs.blogs.site import Site
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"
 
 
 def _build_parser():
@@ -50,14 +50,20 @@ def main() -> int:
         return 0
 
     if args.new_post:
-        categories = manager.db.get_categories()
+        # categories = manager.db.get_categories()
         category, file_path = args.new_post
-        if category not in categories:
-            logger.error(f"输入的分类名 `{category}` 不存在，有效的所有分类：{categories}")
-            return 1
-        title, content = read_post_from_file(file_path)
-        md5 = get_md5_of_file(file_path)
-        manager.new_post(category, title, content, md5)
+        # if category not in categories:
+        #     logger.error(f"输入的分类名 `{category}` 不存在，有效的所有分类：{categories}")
+        #     return 1
+        # title, content = read_post_from_file(file_path)
+
+        # md5 = get_md5_of_file(file_path)
+
+        # asyncio.run(manager.new_post(category, title, content, md5))
+
+        site = Site()
+        site.new_post(file_path)
+
         return 0
 
     if args.delete:
@@ -72,11 +78,21 @@ def main() -> int:
     if args.update_one:
         title, content = read_post_from_file(args.update_one)
         md5 = get_md5_of_file(args.update_one)
-        manager.update_post(title, content, md5)
+        asyncio.run(manager.update_post(title, content, md5))
+
+        site = Site()
+        site.new_post(args.update_one)
+
         return 0
 
     if args.update_all:
-        manager.update_all_posts(args.update_all)
+        changed_files = asyncio.run(manager.update_all_posts(args.update_all))
+
+        if changed_files:
+            site = Site()
+            for path in changed_files:
+                site.new_post(path)
+
         return 0
 
 

@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: setup.py
 # @Created:  2021-04-13 13:35:37
-# @Modified: 2021-04-28 17:06:18
+# @Modified: 2021-05-23 10:20:19
 
 import codecs
 import mbs
@@ -33,5 +33,6 @@ with codecs.open("README.md", "r", "utf-8") as fd:
         },
         install_requires=[
             "requests",
+            "colorful-logger",
         ],
     )

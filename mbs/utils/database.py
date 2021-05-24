@@ -4,15 +4,16 @@
 # @Email: thepoy@163.com
 # @File Name: database.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-04-28 17:05:07
+# @Modified: 2021-05-24 15:38:40
 
-import sys
 import sqlite3
 
 from typing import Optional, Tuple, List
 
-from mbs.blogs import logger
 from mbs.utils.settings import DATABASE_FILE_PATH
+from mbs.utils.logger import child_logger
+
+logger = child_logger(__name__)
 
 
 class DataBase:
@@ -26,10 +27,11 @@ class DataBase:
         # 分类表
         sql = """
         CREATE TABLE IF NOT EXISTS `categories` (
-            id INTEGER PRIMARY KEY NOT NULL,
+            id INTEGER PRIMARY key NOT NULL,
             category VARCHAR NOT NULL UNIQUE,
             jianshu_id INTEGER UNIQUE,
-            cnblogs_id INTEGER UNIQUE
+            cnblogs_id INTEGER UNIQUE,
+            segment_fault_id INTEGER UNIQUE
         );
         """
         self.execute(sql)
@@ -37,13 +39,14 @@ class DataBase:
         # 已上传文件表
         sql = """
         CREATE TABLE IF NOT EXISTS `posts` (
-            id INTEGER PRIMARY KEY NOT NULL,
+            id INTEGER PRIMARY key NOT NULL,
             title VARCHAR NOT NULL UNIQUE,
             md5 VARCHAR NOT NULL UNIQUE,
-            jianshu_id INTEGER NOT NULL UNIQUE,
-            cnblogs_id INTEGER NOT NULL UNIQUE,
+            jianshu_id INTEGER UNIQUE,
+            cnblogs_id INTEGER UNIQUE,
+            segment_fault_id INTEGER UNIQUE,
             category_id INTEGER NOT NULL,
-            FOREIGN KEY (category_id) REFERENCES categories(id)
+            FOREIGN key (category_id) REFERENCES categories(id)
         );
         """
         self.execute(sql)
@@ -51,7 +54,7 @@ class DataBase:
         # 已上传图片
         sql = """
         CREATE TABLE IF NOT EXISTS `uploaded_images` (
-            id INTEGER PRIMARY KEY NOT NULL,
+            id INTEGER PRIMARY key NOT NULL,
             raw_url VARCHAR NOT NULL UNIQUE,
             jianshu_url VARCHAR NOT NULL UNIQUE
         );
@@ -66,29 +69,68 @@ class DataBase:
         rows = self.execute(sql).fetchall()
         return [i[0] for i in rows]
 
-    def select_category(self, category: str) -> Optional[Tuple[int, int, int]]:
+    def select_category(self, category: str) -> Optional[Tuple[int, int, int, int]]:
         sql = "SELECT * FROM `categories` WHERE `category` = '%s';" % category
         row = self.execute(sql).fetchone()
         if row:
-            return row[0], row[2], row[3]
+            return row[0], row[2], row[3], row[4]
         return None
 
-    def insert_category(self, category: str, jianshu_id: Optional[str] = None, cnblogs_id: Optional[str] = None):
-        sql = "INSERT INTO `categories`(`category`, `jianshu_id`, `cnblogs_id`) VALUES (?, ?, ?);"
+    def insert_category(self,
+                        category: str,
+                        jianshu_id: Optional[str] = None,
+                        cnblogs_id: Optional[str] = None,
+                        sf_id: Optional[str] = None):
+        if not (jianshu_id or cnblogs_id or sf_id):
+            raise NotImplementedError("简书、博客园和思否的分类 id， 必须至少传入其中一个")
+
+        sql = "INSERT INTO `categories`(`category`, "
+
+        values = f"VALUES ('{category}', "
+
+        if jianshu_id:
+            sql += "`jianshu_id`, "
+            values += f"{jianshu_id}, "
+
+        if cnblogs_id:
+            sql += "`cnblogs_id`, "
+            values += f"{cnblogs_id}, "
+
+        if sf_id:
+            sql += "`segment_fault_id`, "
+            values += f"{sf_id}, "
+
+        values = values[:-2] + ");"
+
+        sql = sql[:-2] + ") " + values
+
         try:
-            self.execute(sql, category, jianshu_id, cnblogs_id)
+            self.execute(sql)
             self.commit()
         except sqlite3.IntegrityError:
             logger.warning("重复的分类：%s" % category)
             self.rollback()
 
-    def update_category(self, category: str, jianshu_id: Optional[str] = None, cnblogs_id: Optional[str] = None):
-        if jianshu_id and not cnblogs_id:
-            sql = "UPDATE `categories` SET `jianshu_id` = {%s};" % jianshu_id
-        elif cnblogs_id and not jianshu_id:
-            sql = "UPDATE `categories` SET `cnblogs_id` = {%s};" % cnblogs_id
-        else:
-            raise ValueError("更新分类时简书id和博客园id只能存在且必须存在一个值")
+    def update_category(self,
+                        category: str,
+                        jianshu_id: Optional[str] = None,
+                        cnblogs_id: Optional[str] = None,
+                        sf_id: Optional[str] = None):
+        if not (jianshu_id or cnblogs_id or sf_id):
+            raise NotImplementedError("简书、博客园和思否的分类 id， 必须至少传入其中一个")
+
+        sql = "UPDATE `categories` SET "
+
+        if jianshu_id:
+            sql += f"`jianshu_id` = {jianshu_id}, "
+
+        if cnblogs_id:
+            sql += f"`cnblogs_id` = {cnblogs_id}, "
+
+        if sf_id:
+            sql += f"`segment_fault_id` = {sf_id}, "
+
+        sql = sql[:-2] + f" WHERE `category` = '{category}';"
 
         self.execute(sql)
         self.commit()
@@ -97,15 +139,14 @@ class DataBase:
         sql = "SELECT c.category, c.jianshu_id, c.cnblogs_id FROM categories c WHERE c.id = (SELECT p.category_id FROM posts p WHERE p.title = '%s')" % title
         row = self.execute(sql).fetchone()
         if not row:
-            logger.error(f"没找到标题为《{title}》的记录")
-            sys.exit(1)
+            logger.fatal(f"没找到标题为《{title}》的记录")
         return row
 
     def category_exists(self, category: str):
         return bool(self.select_category(category))
 
-    def select_post(self, title: str) -> Tuple[int, int, int]:
-        sql = "SELECT id, jianshu_id, cnblogs_id FROM posts WHERE title = '%s'" % title
+    def select_post(self, title: str) -> Tuple[int, int, int, int]:
+        sql = "SELECT id, jianshu_id, cnblogs_id, segment_fault_id FROM posts WHERE title = '%s'" % title
         row = self.execute(sql).fetchone()
         return row
 
@@ -120,9 +161,46 @@ class DataBase:
         rows = self.execute(sql).fetchall()
         return rows
 
-    def insert_post(self, title: str, md5: str, jianshu_id: int, cnblogs_id: int, category_id: int):
-        sql = "INSERT INTO `posts` (title, md5, jianshu_id, cnblogs_id, category_id) VALUES (?, ?, ?, ?, ?);"
-        self.execute(sql, title, md5, jianshu_id, cnblogs_id, category_id)
+    def insert_post(
+        self,
+        title: str,
+        md5: str,
+        category_id: int,
+        jianshu_id: Optional[int] = None,
+        cnblogs_id: Optional[int] = None,
+        sf_id: Optional[int] = None,
+    ):
+        # 不同博客对于分类的设计模式不同，有的博客只有一个分类（简书），有的博客只有标签（思否），
+        # 所以分类 id 应该可以是一个数字，也可以是一个列表。
+        # 但思否的文章会使用第一个标签作为默认分类，所以不将分类写成列表也是可以的。
+        sql = "INSERT INTO `posts` (title, md5, jianshu_id, cnblogs_id, segment_fault_id, category_id) VALUES (?, ?, ?, ?, ?, ?);"
+        self.execute(sql, title, md5, jianshu_id, cnblogs_id, sf_id, category_id)
+        self.commit()
+
+    def update_new_post(
+        self,
+        title: str,
+        jianshu_id: Optional[int] = None,
+        cnblogs_id: Optional[int] = None,
+        sf_id: Optional[int] = None,
+    ):
+        if not (jianshu_id or cnblogs_id or sf_id):
+            logger.fatal("至少传入一个 id")
+
+        sql = "UPDATE `posts` SET "
+
+        if jianshu_id:
+            sql += f"`jianshu_id` = {jianshu_id}, "
+
+        if cnblogs_id:
+            sql += f"`cnblogs_id` = {cnblogs_id}, "
+
+        if sf_id:
+            sql += f"`segment_fault_id` = {sf_id}, "
+
+        sql = sql[:-2] + f" WHERE `title` = '{title}';"
+
+        self.execute(sql)
         self.commit()
 
     def uploaded(self, raw_url: str, jianshu_url: str):
@@ -152,7 +230,27 @@ class DataBase:
             return None
         return row[0]
 
-    def execute(self, sql, *args):
+    def execute(self, sql: str, *args):
+        if args:
+            spilts = sql.split("?")
+            if len(spilts) != len(args) + 1:
+                logger.warning(f"传入的参数数量与 sql 语句所需的参数数量不一致，sql: {sql}, params: {args}")
+            else:
+                s = spilts[0]
+                for i in range(len(args)):
+                    t = type(args[i])
+                    if t == int or t == float:
+                        s += str(int)
+                    elif t == str:
+                        s += f"'{args[i]}'"
+                    elif args[i] is None:
+                        s += "NULL"
+                    else:
+                        raise RuntimeError(f"unkown type: {t}")
+                    s += spilts[i + 1]
+                logger.debug(s)
+        else:
+            logger.debug(sql)
         return self.cursor.execute(sql, args)
 
     def commit(self):

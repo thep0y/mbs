@@ -4,12 +4,12 @@
 # @Email: thepoy@163.com
 # @File Name: common.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-04-28 17:05:14
+# @Modified: 2021-05-21 09:05:22
 
 import sys
 import os
 if sys.platform == "darwin":
-    import readline
+    import readline  # noqa: F401
 import hashlib
 from typing import Tuple, List
 
@@ -25,7 +25,7 @@ def read_post_from_file(file_path: str) -> Tuple[str, str]:
         file_path (str): 文件路径
 
     Returns:
-        Tuple[str, str]: 文章标题和内容
+        Tuple[title: str, content: str]: 文章标题和内容
     """
     title = os.path.basename(file_path).replace(".md", "")
     with open(file_path, "r", encoding="utf-8") as f:
@@ -85,6 +85,21 @@ def find_all_files(folder: str) -> dict:
 
 def save_categories():
     pass
+
+
+def remove_yaml_header(content: str) -> str:
+    """删除 site 用的 md 文档中的 yaml 头
+
+    这些头信息，在简书或博客园中是多余信息，没有意义，所以需要去除
+    Args:
+        content (str): 带 yaml 的文章内容
+
+    Returns:
+        str: 删除 yaml 头的文章内容
+    """
+    import re
+
+    return re.sub(r"---\n.+?\n---\n{1,2}", "", content, flags=re.MULTILINE | re.DOTALL)
 
 
 if __name__ == '__main__':

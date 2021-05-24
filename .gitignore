@@ -132,3 +132,10 @@ test.py
 mbs/blogs.db
 mbs/config.json
 config.json
+
+# sublime 工作空间
+*.sublime-project
+
+tests
+.vscode/settings.json
+mbs.sublime-workspace

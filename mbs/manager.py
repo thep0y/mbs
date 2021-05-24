@@ -4,20 +4,24 @@
 # @Email: thepoy@163.com
 # @File Name: manager.py
 # @Created:  2021-04-13 14:57:51
-# @Modified: 2021-04-28 17:06:13
+# @Modified: 2021-05-24 16:32:01
 
 import sys
 import os
 import time
+import asyncio
 
-from typing import Union
+from typing import Union, List
 
-from mbs.blogs import logger
 from mbs.blogs.cnblogs import create_post, CnblogsMetaWeblog
 from mbs.blogs.jianshu import Jianshu
-from mbs.utils.common import find_all_files, read_post_from_file, parse_cookies
+from mbs.blogs.segmentfault import SegmentFault
+from mbs.utils.common import find_all_files, read_post_from_file, parse_cookies, remove_yaml_header
 from mbs.utils.database import DataBase
-from mbs.utils.exceptions import ConfigFileNotFoundError
+from mbs.utils.exceptions import ConfigFileNotFoundError, CookiesExpiredError
+from mbs.utils.logger import child_logger
+
+logger = child_logger(__name__)
 
 
 def input_auth_info_of_cnblogs() -> CnblogsMetaWeblog:
@@ -35,14 +39,29 @@ class AllBlogsManager:
         print("没有找到配置文件，需要输入认证信息来生成配置文件")
         cookies = input("请输入已登录的简书 cookies：")
         jianshu = Jianshu(parse_cookies(cookies))
+
         cnblogs = input_auth_info_of_cnblogs()
+
+        # TODO: token 好像就是 cookie 中的  PHPSESSIONID
+        cookies = input("请输入思否的 cookies:")
+        token = input("请输入思否的 token:")
+        sf = SegmentFault({
+            "cookie": cookies,
+            "token": token,
+        })
+
     else:
         cnblogs = CnblogsMetaWeblog()
+        sf = SegmentFault()
 
     db = DataBase()
 
     def __init__(self):
-        self.sync_categories()
+        try:
+            self.sync_categories()
+        except CookiesExpiredError:
+            cookies = input("简书 cookies 过期，请重新在浏览器中登录简书，并将请求头中的新的 Cookies 填写到下面：\n")
+            self.jianshu = Jianshu(parse_cookies(cookies))
 
     def get_categories(self):
         pass
@@ -66,7 +85,7 @@ class AllBlogsManager:
         # self.jianshu.delete_category()
         pass
 
-    def new_post(self, category: str, title: str, content: str, md5: str):
+    async def new_post(self, category: str, title: str, content: str, md5: str):
         ids = self.db.select_category(category)
         if not ids:
             logger.fatal("没有此分类：%s" % category)
@@ -74,40 +93,77 @@ class AllBlogsManager:
 
         logger.info("正在上传 “%s” ..." % title)
 
-        jianshu_id = self.jianshu.new_post(ids[1], title, content)
+        # 提取 tags 需要在删除 yaml 头之前
+        sf_tags_str = self.sf.parse_tags_from_yaml_header(content)
+        if len(sf_tags_str) > 5:
+            logger.fatal("思否的标签个数不能超过 5 个")
+
+        # 删除开头的 yaml 内容
+        content = remove_yaml_header(content)
+        logger.debug("已删除文章的 yaml 头")
+
+        # TODO: 检查数据库中标题是否存在，如果存则返回每个网站的 id，对为空的网站进行上传；
+        # 如果不存在此标题，先创建一个各个 id 均为空的 记录。
+        # 每个网站上传后都要在数据库中更新一次对应的记录，而不是统一更新或插入。
+
+        post = self.db.select_post(title)
+        if post:
+            id_, jianshu_id, cnblogs_id, segment_fault_id = post
+        else:
+            self.db.insert_post(title, md5, ids[0])
+
+        jianshu_task = asyncio.create_task(self.jianshu.new_post(ids[1], title, content, self.db))
 
         post = create_post(title, content, category)
-        cnblogs_id = self.cnblogs.new_post(post)
+        cnblogs_task = asyncio.create_task(self.cnblogs.new_post(post, self.db))
 
-        # 只向简书中添加文章
-        # cnblogs_id = 14588389
+        sf_tags = await self.sf.search_tags(sf_tags_str)
+        sf_task = asyncio.create_task(self.sf.new_post(title, content, sf_tags, self.db))
 
-        self.db.insert_post(title, md5, int(jianshu_id), int(cnblogs_id), ids[0])
-        logger.info("已上传 “%s.md” 到所有博客 - [%s, %s] 的 “%s” 分类中" % (title, self.jianshu, self.cnblogs, category))
+        tasks = [jianshu_task, cnblogs_task, sf_task]
+        await asyncio.gather(*tasks)
 
-    def update_post(self, title: str, content: str, md5: str):
-        post_id, jianshu_id, cnblogs_id = self.db.select_post(title)
+        logger.info("已上传 “%s.md” 到所有博客 - [%s, %s, %s] 的 “%s” 分类中" %
+                    (title, self.jianshu, self.cnblogs, self.sf, category))
+
+    async def update_post(self, title: str, content: str, md5: str):
+        # TODO: 更新时应记录每个网站的更新结果，如果某个网站更新失败，可在下次再次更新该网站的文章
+        post_id, jianshu_id, cnblogs_id, sf_id = self.db.select_post(title)
 
         logger.info(f"正在更新《{title}》...")
 
-        self.jianshu.update_post(jianshu_id, content)
+        jianshu_task = asyncio.create_task(self.jianshu.update_post(jianshu_id, content))
 
         category = self.db.query_category_for_post(title)[0]
         post = create_post(title, content, category)
-        self.cnblogs.edit_post(cnblogs_id, post)
+        cnblogs_task = asyncio.create_task(self.cnblogs.edit_post(cnblogs_id, post))
+
+        if sf_id:
+            sf_task = asyncio.create_task(self.sf.update_post(sf_id, content, title=title))
+            tasks = [jianshu_task, cnblogs_task, sf_task]
+        else:
+            tasks = [jianshu_task, cnblogs_task]
+
+        await asyncio.gather(*tasks)
 
         self.db.update_post(title, md5)
 
         logger.info(f"《{title}》更新完成")
 
-    def update_all_posts(self, folder: str):
+    async def update_all_posts(self, folder: str) -> List[str]:
+        from mbs.utils.common import remove_yaml_header
+
         current_files = find_all_files(folder)
 
         count = 0
 
+        change_files = []
+
+        tasks = []
+
         rows = self.db.select_md5_of_all_posts()
         for row in rows:
-            id_, title, md5, jianshu_id, cnblogs_id, category_id = row
+            id_, title, md5, jianshu_id, cnblogs_id, category_id, sf_id = row
             try:
                 if current_files[title + ".md"]["md5"] != md5:
                     count += 1
@@ -116,10 +172,17 @@ class AllBlogsManager:
                         # TODO: 3 秒可能不够用，以后再遇到频繁错误，适当增加等待时间∏
                         time.sleep(3)
                     file_path = os.path.join(folder, current_files[title + ".md"]["category"], title + ".md")
+                    change_files.append(file_path)
                     content = read_post_from_file(file_path)[1]
-                    self.update_post(title, content, current_files[title + ".md"]["md5"])
+                    content = remove_yaml_header(content)
+                    tasks.append(
+                        asyncio.create_task(self.update_post(title, content, current_files[title + ".md"]["md5"])))
             except KeyError:
                 logger.error(f"博客中没有《{title}》，可能已被删除")
+
+        await asyncio.gather(*tasks)
+
+        return change_files
 
     def delete_post(self, title: str):
         post = self.db.select_post(title)
@@ -162,7 +225,7 @@ class AllBlogsManager:
 
         change_files = []
         for row in self.db.select_md5_of_all_posts():
-            id_, title, md5, jianshu_id, cnblogs_id, category_id = row
+            id_, title, md5, jianshu_id, cnblogs_id, sf_id, category_id = row
             try:
                 if current_files[title + ".md"]["md5"] != md5:
                     change_files.append(title)

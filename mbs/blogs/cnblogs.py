@@ -4,22 +4,23 @@
 # @Email: thepoy@163.com
 # @File Name: cnblogs.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-04-28 17:05:04
+# @Modified: 2021-05-24 16:30:46
 
 import os
 import sys
 import json
 import mimetypes
 import xmlrpc.client as xml
+
 from xmlrpc.client import Fault
 from datetime import datetime
+from typing import Optional, List, Union, Any, Tuple
 
-from typing import Optional, List, Union, Any
-
-from mbs.blogs import logger
 from mbs.utils.structs.meta_weblog import BlogInfo, Post, Enclosure, Source, FileData, WpCategory
-from mbs.utils.exceptions import ConfigFileNotFoundError, ConfigNotFoundError
 from mbs.utils.settings import CONFIG_FILE_PATH
+from mbs.utils.logger import child_logger
+
+logger = child_logger(__name__)
 
 
 def remove_none(data: dict):
@@ -101,6 +102,8 @@ def create_post(title: str,
 
 class CnblogsMetaWeblog:
     """博客园 api"""
+    key = "cnblogs"
+
     def __init__(self, blog_name: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None):
         """初始化函数
 
@@ -109,15 +112,14 @@ class CnblogsMetaWeblog:
             username (Optional[str], optional): 用户名
             password (Optional[str], optional): 密码
         """
-
         if not self._config_file_exists() and (not blog_name or not username or not password):
-            raise ConfigFileNotFoundError("config file not exists, you should input blogName, username, and password")
+            logger.fatal("config file not exists, you should input blogName, username, and password")
 
         config = self._read_config()
 
         if not config:
             if not blog_name or not username or not password:
-                raise ConfigNotFoundError("config file is empty, you should input blogName, username, and password")
+                logger.fatal("config file is empty, you should input blogName, username, and password")
             else:
                 self._server = xml.ServerProxy("https://rpc.cnblogs.com/metaweblog/%s" % blog_name)
                 self._blogger = self._server.blogger
@@ -135,7 +137,6 @@ class CnblogsMetaWeblog:
                 self.config: BlogInfo = config
             except OverflowError as e:
                 logger.fatal(e)
-                sys.exit(1)
 
         self._meta_weblog = self._server.metaWeblog
         self._wp = self._server.wp
@@ -149,8 +150,8 @@ class CnblogsMetaWeblog:
         try:
             blog_info = self._blogger.getUsersBlogs(self.config.blogName, self.config.username, self.config.password)
         except Fault as e:
-            logger.fatal(e)
-            sys.exit(1)
+            logger.error(e)
+            return
 
         if len(blog_info):
             return blog_info[0]
@@ -190,8 +191,7 @@ class CnblogsMetaWeblog:
             else:
                 logger.error("auth failed, response: ", config)
                 sys.exit(1)
-        logger.fatal("empty response")
-        sys.exit(1)
+        logger.error("empty response")
 
     def _config_file_exists(self) -> bool:
         """配置文件是否存在
@@ -227,7 +227,7 @@ class CnblogsMetaWeblog:
         return self._blogger.deletePost(self.config.blogName, postid, self.config.username, self.config.password,
                                         recoverable)
 
-    def edit_post(self, postid: Union[str, int], post: Post, publish: bool = True):
+    async def edit_post(self, postid: Union[str, int], post: Post, publish: bool = True):
         """编辑文章
 
         Args:
@@ -240,7 +240,14 @@ class CnblogsMetaWeblog:
         """
         if isinstance(postid, int):
             postid = str(postid)
-        return self._meta_weblog.editPost(postid, self.config.username, self.config.password, dict(post), publish)
+
+        flag = self._meta_weblog.editPost(postid, self.config.username, self.config.password, dict(post), publish)
+        if flag:
+            logger.info(f"{self}中已更新文章《{post.title}》")
+        else:
+            logger.error(f"{self}中更新文章《{post.title}》时失败")
+
+        return flag
 
     def get_categories(self) -> List[dict]:
         """获取全部分类
@@ -306,10 +313,9 @@ class CnblogsMetaWeblog:
             return self._meta_weblog.newMediaObject(self.config.blogid, self.config.username, self.config.password,
                                                     dict(file_data))
         except Fault as e:
-            logger.fatal(e)
-            sys.exit(1)
+            logger.error(e)
 
-    def new_post(self, post: Post) -> str:
+    async def new_post(self, post: Post, db) -> Tuple[str, int]:
         """发布新文章
 
         Args:
@@ -318,8 +324,20 @@ class CnblogsMetaWeblog:
         Returns:
             str: 文章 id
         """
-        return self._meta_weblog.newPost(self.config.blogid, self.config.username, self.config.password, dict(post),
-                                         True)
+        logger.debug(f"正在向分类 [ {post.categories} ] 中创建新文章 {post.title}")
+        id_ = int(
+            self._meta_weblog.newPost(
+                self.config.blogid,
+                self.config.username,
+                self.config.password,
+                dict(post),
+                True,
+            ))
+
+        logger.info(f"新文章《{post.title}》已上传到 {self}")
+
+        db.update_new_post(post.title, cnblogs_id=id_)
+        return self.key, id_
 
     def new_category(self,
                      name: str,
