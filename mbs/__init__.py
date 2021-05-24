@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: __init__.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-05-24 12:30:46
+# @Modified: 2021-05-24 20:51:37
 
 import sys
 import asyncio
@@ -13,8 +13,11 @@ import argparse
 from mbs.utils.common import read_post_from_file, get_md5_of_file
 from mbs.manager import AllBlogsManager
 from mbs.blogs.site import Site
+from mbs.utils.logger import child_logger
 
-__version__ = "0.0.5"
+logger = child_logger("main")
+
+__version__ = "0.0.6"
 
 
 def _build_parser():
@@ -50,16 +53,16 @@ def main() -> int:
         return 0
 
     if args.new_post:
-        # categories = manager.db.get_categories()
+        categories = manager.db.get_categories()
         category, file_path = args.new_post
-        # if category not in categories:
-        #     logger.error(f"输入的分类名 `{category}` 不存在，有效的所有分类：{categories}")
-        #     return 1
-        # title, content = read_post_from_file(file_path)
+        if category not in categories:
+            logger.error(f"输入的分类名 `{category}` 不存在，有效的所有分类：{categories}")
+            return 1
+        title, content = read_post_from_file(file_path)
 
-        # md5 = get_md5_of_file(file_path)
+        md5 = get_md5_of_file(file_path)
 
-        # asyncio.run(manager.new_post(category, title, content, md5))
+        asyncio.run(manager.new_post(category, title, content, md5))
 
         site = Site()
         site.new_post(file_path)

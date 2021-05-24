@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: database.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-05-24 15:38:40
+# @Modified: 2021-05-24 20:40:58
 
 import sqlite3
 
@@ -240,7 +240,7 @@ class DataBase:
                 for i in range(len(args)):
                     t = type(args[i])
                     if t == int or t == float:
-                        s += str(int)
+                        s += str(t)
                     elif t == str:
                         s += f"'{args[i]}'"
                     elif args[i] is None:

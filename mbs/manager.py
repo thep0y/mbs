@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: manager.py
 # @Created:  2021-04-13 14:57:51
-# @Modified: 2021-05-24 16:32:01
+# @Modified: 2021-05-24 20:48:17
 
 import sys
 import os
@@ -106,21 +106,36 @@ class AllBlogsManager:
         # 如果不存在此标题，先创建一个各个 id 均为空的 记录。
         # 每个网站上传后都要在数据库中更新一次对应的记录，而不是统一更新或插入。
 
-        post = self.db.select_post(title)
-        if post:
-            id_, jianshu_id, cnblogs_id, segment_fault_id = post
+        tasks = []
+
+        post_record = self.db.select_post(title)
+        if post_record:
+            logger.warning(f"之前上传过此文章，文章的记录已存在 {post_record}")
+            id_, jianshu_id, cnblogs_id, segment_fault_id = post_record
+            if jianshu_id and cnblogs_id and segment_fault_id:
+                logger.fatal("所有博客中均有此文章，不能再上传，可以更新此文章")
+
+            if not jianshu_id:
+                tasks.append(asyncio.create_task(self.jianshu.new_post(ids[1], title, content, self.db)))
+            if not cnblogs_id:
+                post = create_post(title, content, category)
+                tasks.append(asyncio.create_task(self.cnblogs.new_post(post, self.db)))
+            if not segment_fault_id:
+                sf_tags = await self.sf.search_tags(sf_tags_str)
+                tasks.append(asyncio.create_task(self.sf.new_post(title, content, sf_tags, self.db)))
         else:
             self.db.insert_post(title, md5, ids[0])
 
-        jianshu_task = asyncio.create_task(self.jianshu.new_post(ids[1], title, content, self.db))
+            jianshu_task = asyncio.create_task(self.jianshu.new_post(ids[1], title, content, self.db))
 
-        post = create_post(title, content, category)
-        cnblogs_task = asyncio.create_task(self.cnblogs.new_post(post, self.db))
+            post = create_post(title, content, category)
+            cnblogs_task = asyncio.create_task(self.cnblogs.new_post(post, self.db))
 
-        sf_tags = await self.sf.search_tags(sf_tags_str)
-        sf_task = asyncio.create_task(self.sf.new_post(title, content, sf_tags, self.db))
+            sf_tags = await self.sf.search_tags(sf_tags_str)
+            sf_task = asyncio.create_task(self.sf.new_post(title, content, sf_tags, self.db))
 
-        tasks = [jianshu_task, cnblogs_task, sf_task]
+            tasks = [jianshu_task, cnblogs_task, sf_task]
+
         await asyncio.gather(*tasks)
 
         logger.info("已上传 “%s.md” 到所有博客 - [%s, %s, %s] 的 “%s” 分类中" %
