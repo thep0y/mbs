@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: segmentfault.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-05-24 16:30:07
+# @Modified: 2021-05-25 11:48:26
 
 import asyncio
 
@@ -117,7 +117,7 @@ class SegmentFault(LoginedBaseBlog):
         else:
             logger.error(f"状态码：{resp.status_code}，错误响应：{resp.text}")
 
-    async def search_tag(self, tag: str) -> int:
+    async def search_tag(self, tag: str, db) -> int:
         url = f"https://gateway.segmentfault.com/tags?query=search&q={tag}"
         logger.debug(f"正在查询 tag [ {tag} ]")
         resp = self._get(url)
@@ -126,9 +126,6 @@ class SegmentFault(LoginedBaseBlog):
             sf_id = result[0]["id"] if result else 0
 
             if sf_id:
-                from mbs.utils.database import DataBase
-
-                db = DataBase()
                 if db.category_exists(tag):
                     logger.debug(f"数据库中已有此分类 {tag}，更新 `segment_fault_id` 字段为 [ {sf_id} ]")
                     db.update_category(tag, sf_id=sf_id)
@@ -140,9 +137,9 @@ class SegmentFault(LoginedBaseBlog):
         else:
             logger.error(f"状态码：{resp.status_code}，错误响应：{resp.text}")
 
-    async def search_tags(self, tags: List[str]) -> List[int]:
+    async def search_tags(self, tags: List[str], db) -> List[int]:
         logger.debug(f"正在查询多个标签 {tags}")
-        tasks = [asyncio.create_task(self.search_tag(tag)) for tag in tags]
+        tasks = [asyncio.create_task(self.search_tag(tag, db)) for tag in tags]
 
         result = await asyncio.gather(*tasks)
 

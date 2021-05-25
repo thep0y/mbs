@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: manager.py
 # @Created:  2021-04-13 14:57:51
-# @Modified: 2021-05-24 20:48:17
+# @Modified: 2021-05-25 11:49:52
 
 import sys
 import os
@@ -86,6 +86,13 @@ class AllBlogsManager:
         pass
 
     async def new_post(self, category: str, title: str, content: str, md5: str):
+        post_record = self.db.select_post(title)
+        if post_record:
+            logger.warning(f"之前上传过此文章，文章的记录已存在 {post_record}")
+            id_, jianshu_id, cnblogs_id, segment_fault_id = post_record
+            if jianshu_id and cnblogs_id and segment_fault_id:
+                logger.fatal("所有博客中均有此文章，不能再上传，可以更新此文章")
+
         ids = self.db.select_category(category)
         if not ids:
             logger.fatal("没有此分类：%s" % category)
@@ -102,26 +109,16 @@ class AllBlogsManager:
         content = remove_yaml_header(content)
         logger.debug("已删除文章的 yaml 头")
 
-        # TODO: 检查数据库中标题是否存在，如果存则返回每个网站的 id，对为空的网站进行上传；
-        # 如果不存在此标题，先创建一个各个 id 均为空的 记录。
-        # 每个网站上传后都要在数据库中更新一次对应的记录，而不是统一更新或插入。
-
         tasks = []
 
-        post_record = self.db.select_post(title)
         if post_record:
-            logger.warning(f"之前上传过此文章，文章的记录已存在 {post_record}")
-            id_, jianshu_id, cnblogs_id, segment_fault_id = post_record
-            if jianshu_id and cnblogs_id and segment_fault_id:
-                logger.fatal("所有博客中均有此文章，不能再上传，可以更新此文章")
-
             if not jianshu_id:
                 tasks.append(asyncio.create_task(self.jianshu.new_post(ids[1], title, content, self.db)))
             if not cnblogs_id:
                 post = create_post(title, content, category)
                 tasks.append(asyncio.create_task(self.cnblogs.new_post(post, self.db)))
             if not segment_fault_id:
-                sf_tags = await self.sf.search_tags(sf_tags_str)
+                sf_tags = await self.sf.search_tags(sf_tags_str, self.db)
                 tasks.append(asyncio.create_task(self.sf.new_post(title, content, sf_tags, self.db)))
         else:
             self.db.insert_post(title, md5, ids[0])
@@ -131,7 +128,7 @@ class AllBlogsManager:
             post = create_post(title, content, category)
             cnblogs_task = asyncio.create_task(self.cnblogs.new_post(post, self.db))
 
-            sf_tags = await self.sf.search_tags(sf_tags_str)
+            sf_tags = await self.sf.search_tags(sf_tags_str, self.db)
             sf_task = asyncio.create_task(self.sf.new_post(title, content, sf_tags, self.db))
 
             tasks = [jianshu_task, cnblogs_task, sf_task]

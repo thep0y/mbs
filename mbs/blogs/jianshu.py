@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: jianshu.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-05-24 16:30:26
+# @Modified: 2021-05-25 11:43:21
 
 import os
 import json
@@ -128,20 +128,20 @@ class Jianshu:
         resp = self.__post(url, data)
         return parse_response(Created, resp)
 
-    async def __put_post(self, postid: int, title: str, content: str, version: int = 1):
+    async def __put_post(self, postid: int, title: str, content: str, db, version: int = 1):
         url = "https://www.jianshu.com/author/notes/%d" % postid
 
         # 将 content 中所有的图片上传到简书，用简书反回的图片链接进行替换
-        content = await self._replace_all_images(content)
+        content = await self._replace_all_images(content, db)
 
         data = {"id": str(postid), "autosave_control": version, "title": title, "content": content}
 
         resp = self.__put(url, data)
         return parse_response(Updated, resp)
 
-    def __put_new_post(self, postid: int, title: str, content: str):
+    def __put_new_post(self, postid: int, title: str, content: str, db):
         logger.debug(f"正在上传新文章的内容：{title}")
-        return self.__put_post(postid, title, content)
+        return self.__put_post(postid, title, content, db)
 
     async def __publish_new_post(self, postid: int):
         url = f"https://www.jianshu.com/author/notes/{postid}/publicize"
@@ -157,13 +157,14 @@ class Jianshu:
         return self.__get(url).json()["content"]
 
     async def new_post(self, notebook_id: Union[str, int], title: str, content: str, db) -> Tuple[str, int]:
+        # 创建新文章时需要先用标题在指定文集中请求一个文章 id，后面用这个文章 id 发表文章
         created = self.__create_new_post(notebook_id, title)
         if not created:
             logger.error("上传失败")
             return self.key, None
-        logger.debug(f"新文章《{title}》已创建")
+        logger.debug(f"新文章《{title}》的 id {created.id} 已创建")
 
-        updated = await self.__put_new_post(created["id"], title, content)
+        updated = await self.__put_new_post(created.id, title, content, db)
         if not updated:
             logger.error("上传失败")
             return self.key, None
@@ -243,11 +244,8 @@ class Jianshu:
         url = f"https://www.jianshu.com/author/notebooks/{category_id}/soft_destroy"
         return self.__post(url).status_code
 
-    async def _replace_all_images(self, content: str) -> str:
+    async def _replace_all_images(self, content: str, db) -> str:
         import re
-        from mbs.utils.database import DataBase
-
-        db = DataBase()
 
         imgs = re.findall(r"!\[.+?\]\((.+?)\)", content)
 
