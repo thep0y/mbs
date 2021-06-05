@@ -4,10 +4,11 @@
 # @Email: thepoy@163.com
 # @File Name: site.py
 # @Created: 2021-05-13 16:40:03
-# @Modified: 2021-05-24 16:28:49
+# @Modified: 2021-06-05 21:15:33
 
 import json
 import os
+import sys
 import time
 import re
 import uuid
@@ -79,28 +80,33 @@ class Site:
         try:
             with open(CONFIG_FILE_PATH, "r+") as f:
                 all_config = json.loads(f.read())
-                all_config.update({
-                    self.key: {
-                        "user": self.user,
-                        "passwd": self.passwd,
-                        "addr": self.addr,
-                        "target_folder": self.target_folder,
-                    }
-                })
-                f.seek(0, 0)
-                f.write(json.dumps(all_config))
-                f.truncate()
-        except FileNotFoundError:
-            with open(CONFIG_FILE_PATH, "w") as f:
-                f.write(
-                    json.dumps({
+                all_config.update(
+                    {
                         self.key: {
                             "user": self.user,
                             "passwd": self.passwd,
                             "addr": self.addr,
                             "target_folder": self.target_folder,
                         }
-                    }))
+                    }
+                )
+                f.seek(0, 0)
+                f.write(json.dumps(all_config))
+                f.truncate()
+        except FileNotFoundError:
+            with open(CONFIG_FILE_PATH, "w") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            self.key: {
+                                "user": self.user,
+                                "passwd": self.passwd,
+                                "addr": self.addr,
+                                "target_folder": self.target_folder,
+                            }
+                        }
+                    )
+                )
 
     def new_post(self, path: str):
         logger.info("即将上传或更新 [ %s ]" % path)
@@ -149,10 +155,12 @@ class Site:
 
             # 创建文章时，创建新的 key
             u = uuid.uuid4().hex
+        else:
+            logger.fatal("无法辨别更新还是新建")
 
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
-            content = re.sub(r"^key: ?$", f"key: {u}", content, flags=re.MULTILINE)
+            content = re.sub(r"^key: ?$", f"key: {u}", content, flags=re.MULTILINE) # type: ignore
             with open(f"/tmp/{remote_file_name}", "w", encoding="utf-8") as nf:
                 nf.write(content)
 

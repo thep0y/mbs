@@ -4,11 +4,12 @@
 # @Email: thepoy@163.com
 # @File Name: database.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-05-24 20:40:58
+# @Modified: 2021-06-05 21:01:16
 
 import sqlite3
+import time
 
-from typing import Optional, Tuple, List
+from typing import Any, Optional, Tuple, List
 
 from mbs.utils.settings import DATABASE_FILE_PATH
 from mbs.utils.logger import child_logger
@@ -46,6 +47,9 @@ class DataBase:
             cnblogs_id INTEGER UNIQUE,
             segment_fault_id INTEGER UNIQUE,
             category_id INTEGER NOT NULL,
+            file_path VARCHAR(256) NOT NULL UNIQUE,
+            create_time DATETIME DEFAULT NULL,
+            update_time DATETIME DEFAULT NULL,
             FOREIGN key (category_id) REFERENCES categories(id)
         );
         """
@@ -76,11 +80,40 @@ class DataBase:
             return row[0], row[2], row[3], row[4]
         return None
 
-    def insert_category(self,
-                        category: str,
-                        jianshu_id: Optional[str] = None,
-                        cnblogs_id: Optional[str] = None,
-                        sf_id: Optional[str] = None):
+    def select_category_by_title(
+        self,
+        title: str,
+        jianshu=0,
+        cnblogs=0,
+        sf=0,
+    ) -> Optional[str]:
+        # TODO: 用联合查询返回所有网站的分类 id
+        sql = "SELECT `category_id` FROM `posts` WHERE `title` = '%s'" % title
+
+        # items = ""
+        # if not jianshu:
+        #     items += "`jianshu_id`, "
+        # if not cnblogs:
+        #     items += "`cnblogs_id`, "
+        # if not sf:
+        #     items += "`segment_fault_id`, "
+
+        # items = items[:-2]
+
+        sql = "SELECT `category` FROM `categories` as c WHERE c.id == (%s)" % sql
+
+        row = self.execute(sql).fetchone()
+        if row:
+            return row[0]
+        return None
+
+    def insert_category(
+        self,
+        category: str,
+        jianshu_id: Optional[int] = None,
+        cnblogs_id: Optional[int] = None,
+        sf_id: Optional[str] = None,
+    ):
         if not (jianshu_id or cnblogs_id or sf_id):
             raise NotImplementedError("简书、博客园和思否的分类 id， 必须至少传入其中一个")
 
@@ -108,14 +141,17 @@ class DataBase:
             self.execute(sql)
             self.commit()
         except sqlite3.IntegrityError:
-            logger.warning("重复的分类：%s" % category)
+            # 因为是允许分类重复插入，所以当触发 unique 错误时，此处用 debug 日志
+            logger.debug("重复的分类：%s" % category)
             self.rollback()
 
-    def update_category(self,
-                        category: str,
-                        jianshu_id: Optional[str] = None,
-                        cnblogs_id: Optional[str] = None,
-                        sf_id: Optional[str] = None):
+    def update_category(
+        self,
+        category: str,
+        jianshu_id: Optional[str] = None,
+        cnblogs_id: Optional[str] = None,
+        sf_id: Optional[str] = None,
+    ):
         if not (jianshu_id or cnblogs_id or sf_id):
             raise NotImplementedError("简书、博客园和思否的分类 id， 必须至少传入其中一个")
 
@@ -136,7 +172,10 @@ class DataBase:
         self.commit()
 
     def query_category_for_post(self, title: str) -> Tuple[str, int, int]:
-        sql = "SELECT c.category, c.jianshu_id, c.cnblogs_id FROM categories c WHERE c.id = (SELECT p.category_id FROM posts p WHERE p.title = '%s')" % title
+        sql = (
+            "SELECT c.category, c.jianshu_id, c.cnblogs_id FROM categories c WHERE c.id = (SELECT p.category_id FROM posts p WHERE p.title = '%s')"
+            % title
+        )
         row = self.execute(sql).fetchone()
         if not row:
             logger.fatal(f"没找到标题为《{title}》的记录")
@@ -151,12 +190,20 @@ class DataBase:
         return row
 
     def update_post(self, title: str, md5: str):
-        sql = "UPDATE posts SET md5 = '%s' WHERE title = '%s';" % (md5, title)
+        now = time.localtime()
+        update_time = time.strftime("%Y-%m-%d %H:%M:%S", now)
+        sql = "UPDATE posts SET md5 = '%s', `update_time` = '%s' WHERE title = '%s';" % (md5, update_time, title)
         self.execute(sql)
 
         self.commit()  # 不 commit 就无法完成更新
 
-    def select_md5_of_all_posts(self) -> tuple:
+    def select_all_not_uploaded_posts(self):
+        sql = "SELECT title, jianshu_id, cnblogs_id, segment_fault_id, file_path  FROM posts WHERE jianshu_id IS NULL OR cnblogs_id IS NULL OR segment_fault_id IS NULL;"
+
+        rows = self.execute(sql).fetchall()
+        return rows
+
+    def select_md5_of_all_posts(self) -> List[Any]:
         sql = "SELECT * FROM posts"
         rows = self.execute(sql).fetchall()
         return rows
@@ -166,6 +213,7 @@ class DataBase:
         title: str,
         md5: str,
         category_id: int,
+        file_path: Optional[str] = None,
         jianshu_id: Optional[int] = None,
         cnblogs_id: Optional[int] = None,
         sf_id: Optional[int] = None,
@@ -173,8 +221,20 @@ class DataBase:
         # 不同博客对于分类的设计模式不同，有的博客只有一个分类（简书），有的博客只有标签（思否），
         # 所以分类 id 应该可以是一个数字，也可以是一个列表。
         # 但思否的文章会使用第一个标签作为默认分类，所以不将分类写成列表也是可以的。
-        sql = "INSERT INTO `posts` (title, md5, jianshu_id, cnblogs_id, segment_fault_id, category_id) VALUES (?, ?, ?, ?, ?, ?);"
-        self.execute(sql, title, md5, jianshu_id, cnblogs_id, sf_id, category_id)
+        sql = "INSERT INTO `posts` (title, md5, jianshu_id, cnblogs_id, segment_fault_id, category_id, file_path, create_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
+        now = time.localtime()
+        create_time = time.strftime("%Y-%m-%d %H:%M:%S", now)
+        self.execute(
+            sql,
+            title,
+            md5,
+            jianshu_id,
+            cnblogs_id,
+            sf_id,
+            category_id,
+            file_path,
+            create_time,
+        )
         self.commit()
 
     def update_new_post(
@@ -240,13 +300,13 @@ class DataBase:
                 for i in range(len(args)):
                     t = type(args[i])
                     if t == int or t == float:
-                        s += str(t)
+                        s += str(args[i])
                     elif t == str:
                         s += f"'{args[i]}'"
                     elif args[i] is None:
                         s += "NULL"
                     else:
-                        raise RuntimeError(f"unkown type: {t}")
+                        raise RuntimeError(f"unkown type: {args[i]}")
                     s += spilts[i + 1]
                 logger.debug(s)
         else:
@@ -264,8 +324,3 @@ class DataBase:
 
     def __del__(self):
         self.close()
-
-
-if __name__ == '__main__':
-    db = DataBase()
-    db._create_database()

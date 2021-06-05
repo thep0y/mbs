@@ -4,9 +4,10 @@
 # @Email: thepoy@163.com
 # @File Name: segmentfault.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-05-25 11:48:26
+# @Modified: 2021-06-05 21:12:45
 
 import asyncio
+import sys
 
 from typing import Union, Optional, Dict, List, Tuple
 
@@ -27,7 +28,7 @@ class SegmentFault(LoginedBaseBlog):
             "token": token,
         }
 
-    def get_post(self, postid: Union[str, int]) -> str:
+    def get_post(self, postid: Union[str, int]) -> Optional[str]:
         url = f"https://gateway.segmentfault.com/article?query=prepare&draft_id=&id={postid}&freshman=1"
         resp = self._get(url)
 
@@ -35,24 +36,26 @@ class SegmentFault(LoginedBaseBlog):
             return resp.json()["article"]["original_text"]
         else:
             logger.error(f"状态码：{resp.status_code}，错误响应：{resp.text}")
+            return None
 
     async def update_post(
         self,
         postid: Union[str, int],
         content: str,
-        tags: List[int] = None,
+        db,
+        tags_str: List[str] = None,
         title: Optional[str] = None,
     ) -> bool:
-        revisions = self._revisions(postid)
+        revisions = self._revisions(int(postid))
         logger.debug(f"最新版本：{revisions}")
 
         if not title:
             title = revisions["title"]
 
-        if not tags:
+        if not tags_str:
             tags = [i["id"] for i in revisions["tags"]]
         else:
-            tags = self.search_tags(tags)
+            tags = await self.search_tags(tags_str, db)
             logger.debug(f"查询到的所有标签 id => {tags}")
 
         # TODO: 不管是创建还是更新都需要创建一个草稿，此步是否必要存疑
@@ -71,7 +74,7 @@ class SegmentFault(LoginedBaseBlog):
             "url": "",
             "cover": None,
             "license": 1,
-            "log": ""
+            "log": "",
         }
 
         logger.debug(f"即将更新文章 id={postid}")
@@ -83,7 +86,7 @@ class SegmentFault(LoginedBaseBlog):
         logger.info(f"{self}中已更新文章《{title}》")
         return bool(resp.json()["data"]["id"])
 
-    def _revisions(self, postid: int) -> dict:
+    def _revisions(self, postid: int) -> Optional[dict]:
         url = f"https://gateway.segmentfault.com/revisions?object_id={postid}"
         logger.debug(f"生成版本查询链接 {url}，即将访问此链接")
         resp = self._get(url)
@@ -93,8 +96,9 @@ class SegmentFault(LoginedBaseBlog):
             return resp.json()[0]
         else:
             logger.error(f"状态码：{resp.status_code}，错误响应：{resp.text}")
+            return None
 
-    def _draft(self, postid, title, content, tags: List[int]) -> int:
+    def _draft(self, postid, title, content, tags: List[int]) -> Optional[int]:
         """生成草稿
 
         Args:
@@ -116,8 +120,9 @@ class SegmentFault(LoginedBaseBlog):
             return resp.json()["id"]
         else:
             logger.error(f"状态码：{resp.status_code}，错误响应：{resp.text}")
+            return None
 
-    async def search_tag(self, tag: str, db) -> int:
+    async def search_tag(self, tag: str, db) -> Optional[int]:
         url = f"https://gateway.segmentfault.com/tags?query=search&q={tag}"
         logger.debug(f"正在查询 tag [ {tag} ]")
         resp = self._get(url)
@@ -136,6 +141,7 @@ class SegmentFault(LoginedBaseBlog):
             return sf_id
         else:
             logger.error(f"状态码：{resp.status_code}，错误响应：{resp.text}")
+            return None
 
     async def search_tags(self, tags: List[str], db) -> List[int]:
         logger.debug(f"正在查询多个标签 {tags}")
@@ -143,9 +149,12 @@ class SegmentFault(LoginedBaseBlog):
 
         result = await asyncio.gather(*tasks)
 
-        return [i for i in result if type(i) == int]
+        return [i for i in result if i and type(i) == int]
 
-    async def new_post(self, title: str, content: str, tags: List[int], db) -> Tuple[str, int]:
+    async def new_post(self, title: str, content: str, tags: List[int], db) -> Tuple[str, Optional[int]]:
+        if not self.key:
+            logger.fatal("没有定义 key")
+            sys.exit(1)
         # TODO: 未测试是否必须创建先草稿
         draft_id = self._draft("", title, content, tags)
 
@@ -178,13 +187,16 @@ class SegmentFault(LoginedBaseBlog):
             logger.error(f"状态码：{resp.status_code}，错误响应：{resp.text}")
             return self.key, None
 
-    def parse_tags_from_yaml_header(self, content: str) -> List[str]:
+    def parse_tags_from_yaml_header(self, content: str) -> Optional[List[str]]:
         import re
 
-        re_tags = re.search(r"tags: \[(.+?)\]", content).group(1)
-        tags = [i for i in re_tags.split(", ")]
-        logger.debug(f"正则表达式提取出来的标签为：{tags}")
-        return tags
+        try:
+            re_tags = re.search(r"tags: \[(.+?)\]", content).group(1)
+            tags = [i for i in re_tags.split(", ")]
+            logger.debug(f"正则表达式提取出来的标签为：{tags}")
+            return tags
+        except AttributeError:
+            return None
 
     def __str__(self):
         return "思否"

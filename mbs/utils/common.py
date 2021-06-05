@@ -4,12 +4,14 @@
 # @Email: thepoy@163.com
 # @File Name: common.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-05-21 09:05:22
+# @Modified: 2021-06-05 20:44:31
 
 import sys
 import os
+
 if sys.platform == "darwin":
-    import readline  # noqa: F401
+    import readline
+
 import hashlib
 from typing import Tuple, List
 
@@ -54,22 +56,24 @@ def get_md5_of_file(file_path, buf: int = 4096) -> str:
 
 def scan_folder(folder_path: str) -> dict:
     """
-        以子文件夹的文件名作为分类名，
-        数据库中保存博客中存在的分类，如果本地分类多于数据库中的分类，则在博客中添加多出来的分类。
-        所有文件名尽量不修改，如果修改文件名，将被视为新文件直接上传，而不更新。
-        扫描时对比所有文件的 md5 与数据库中对应标题的已上传文件的 md5 是否相同，
-        不相同则更新文章，相同则不进行任何操作。
-        如果数据库中不存在对应标题的文章，直接上传。
+    以子文件夹的文件名作为分类名，
+    数据库中保存博客中存在的分类，如果本地分类多于数据库中的分类，则在博客中添加多出来的分类。
+    所有文件名尽量不修改，如果修改文件名，将被视为新文件直接上传，而不更新。
+    扫描时对比所有文件的 md5 与数据库中对应标题的已上传文件的 md5 是否相同，
+    不相同则更新文章，相同则不进行任何操作。
+    如果数据库中不存在对应标题的文章，直接上传。
     """
     folders = _remove_hidden_folders_or_files(folder_path)
     all_files = {}
     for folder in folders:
         item = []
         for file in _get_all_markdown_files(os.path.join(folder_path, folder)):
-            item.append({
-                "file_name": file,
-                "md5": get_md5_of_file(os.path.join(folder_path, folder, file)),
-            })
+            item.append(
+                {
+                    "file_name": file,
+                    "md5": get_md5_of_file(os.path.join(folder_path, folder, file)),
+                }
+            )
         all_files[folder] = item
     return all_files
 
@@ -91,6 +95,7 @@ def remove_yaml_header(content: str) -> str:
     """删除 site 用的 md 文档中的 yaml 头
 
     这些头信息，在简书或博客园中是多余信息，没有意义，所以需要去除
+
     Args:
         content (str): 带 yaml 的文章内容
 
@@ -100,10 +105,3 @@ def remove_yaml_header(content: str) -> str:
     import re
 
     return re.sub(r"---\n.+?\n---\n{1,2}", "", content, flags=re.MULTILINE | re.DOTALL)
-
-
-if __name__ == '__main__':
-    print(get_md5_of_file("/Volumes/MAC专用/markdown/Go/Golang调度器和GMP模型.md"))
-    # print(get_md5_of_file("/Volumes/MAC专用/markdown/System/分布式系统的理论发展.md"))
-    # cookies = input("cookies: ")
-    # parse_cookies(cookies)

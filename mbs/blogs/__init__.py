@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: __init__.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-05-23 13:22:09
+# @Modified: 2021-06-05 21:11:52
 
 import json
 
@@ -26,8 +26,8 @@ logger = child_logger(__name__)
 class BaseBlog:
     key: Optional[str] = None
     headers = {
-        "Accept": 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:87.0) Gecko/20100101 Firefox/87.0',
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:87.0) Gecko/20100101 Firefox/87.0",
     }
 
 
@@ -51,7 +51,8 @@ class LoginedBaseBlog(BaseBlog):
                 self.headers.update(auth_dict)
         except FileNotFoundError:
             raise ConfigFileNotFoundError(
-                f"config file is not found, you should input the cookies of {self.key} to create config file.")
+                f"config file is not found, you should input the cookies of {self.key} to create config file."
+            )
         except KeyError:
             logger.error(f"there is no {self.key}'s cookies in config file, you should input it first.")
             auth_dict = self._input_auth_info()
@@ -98,10 +99,10 @@ class LoginedBaseBlog(BaseBlog):
 
         return requests.put(url, headers=headers, json=data)
 
-    def get_post(self, postid: Union[str, int]) -> str:
+    def get_post(self, postid: Union[str, int]) -> str:  # type: ignore
         pass
 
-    def new_post(self, title: str, content: str, *args) -> str:
+    def new_post(self, title: str, content: str, *args) -> str:  # type: ignore
         pass
 
     def update_post(self, postid: Union[str, int], content: str, title: Optional[str] = None):

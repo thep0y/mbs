@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: jianshu.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-05-25 11:43:21
+# @Modified: 2021-06-05 21:50:36
 
 import os
 import json
@@ -26,18 +26,19 @@ Categories = List[Category]
 logger = child_logger(__name__)
 
 
-def parse_response(struct: BaseStruct, resp: Response) -> BaseStruct:
+def parse_response(struct, resp: Response) -> Optional[BaseStruct]:
     """解析响应
 
     Args:
-        struct (BaseStruct): 响应对应的结构体
+        struct (BaseStruct): 响应对应的结构体，参数是类，而不是实例
         resp (Response): 响应
 
     Returns:
         BaseStruct: 解析过的结构体
     """
     if resp.status_code == 200:
-        return struct(resp.json())
+        # 将字典转换为 Struct 类型
+        return struct(resp.json())  # type: ignore
     else:
         error = Error(resp.json())
         # TODO: 出错后，如果当前是在发布文章，则将当前文章进行标记，保存到数据库，
@@ -50,10 +51,11 @@ def parse_response(struct: BaseStruct, resp: Response) -> BaseStruct:
 
 class Jianshu:
     """简书 api"""
+
     key = "jianshu"
     headers = {
-        "Accept": 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:87.0) Gecko/20100101 Firefox/87.0',
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:87.0) Gecko/20100101 Firefox/87.0",
     }
 
     def __init__(self, cookies: Optional[dict] = None):
@@ -109,14 +111,18 @@ class Jianshu:
         if resp.status_code == 200:
             categories = []
             for i in resp.json():
-                categories.append(Category({
-                    "id": i["id"],
-                    "name": i["name"],
-                }))
+                categories.append(
+                    Category(
+                        {
+                            "id": i["id"],
+                            "name": i["name"],
+                        }
+                    )
+                )
             return categories
         logger.error("cookie 已过期：", resp.json())
 
-    def __create_new_post(self, notebook_id: Union[str, int], title: str) -> Optional[dict]:
+    def __create_new_post(self, notebook_id: Union[str, int], title: str) -> Optional[BaseStruct]:
         url = "https://www.jianshu.com/author/notes"
 
         data = {
@@ -156,7 +162,7 @@ class Jianshu:
         url = f"https://www.jianshu.com/author/notes/{postid}/content"
         return self.__get(url).json()["content"]
 
-    async def new_post(self, notebook_id: Union[str, int], title: str, content: str, db) -> Tuple[str, int]:
+    async def new_post(self, notebook_id: Union[str, int], title: str, content: str, db) -> Tuple[str, Optional[int]]:
         # 创建新文章时需要先用标题在指定文集中请求一个文章 id，后面用这个文章 id 发表文章
         created = self.__create_new_post(notebook_id, title)
         if not created:
@@ -186,22 +192,27 @@ class Jianshu:
         resp = self.__post(url)
         return parse_response(Deleted, resp)
 
-    async def update_post(self, postid: Union[str, int], content: str):
+    async def update_post(self, postid: Union[str, int], content: str, db):
+
         # 奇葩简书不能更新太频繁，每次更新前休眠 2 秒
         await asyncio.sleep(2)
 
-        title, version, notebook_id = await self._get_info_of_post(postid)
+        post = await self._get_info_of_post(int(postid))
+        if not post:
+            logger.error("没找到文章：%s" % postid)
+            return
+        title, version, _ = post
         logger.debug(f"原文章信息：id={postid}，title={title}，version={version}")
         logger.info("正在更新文章")
-        put_result = await self.__put_post(postid, title, content, version + 1)
+        put_result = await self.__put_post(int(postid), title, content, db, version + 1)
         if put_result["content_size_status"] != "fine":
             logger.error(f"文章更新失败：{put_result}")
             return
         logger.debug("更新的文章已保存到草稿箱，待发布")
-        await self.__publish_new_post(postid)
+        await self.__publish_new_post(int(postid))
         logger.info(f"{self}中已更新文章《{title}》")
 
-    async def _get_info_of_post(self, postid: int) -> Tuple[str, int, int]:
+    async def _get_info_of_post(self, postid: int) -> Optional[Tuple[str, int, int]]:
         notebook_id = self.__select_category_for_post(postid)
         url = f"https://www.jianshu.com/author/notebooks/{notebook_id}/notes"
         logger.debug(f"正在访问 {url}")
@@ -213,15 +224,19 @@ class Jianshu:
 
     def __select_category_for_post(self, postid: int):
         from mbs.utils.database import DataBase
+
         db = DataBase()
-        sql = "SELECT c.jianshu_id FROM categories as c WHERE c.id = (SELECT p.category_id FROM posts p WHERE p.jianshu_id = %d)" % postid
+        sql = (
+            "SELECT c.jianshu_id FROM categories as c WHERE c.id = (SELECT p.category_id FROM posts p WHERE p.jianshu_id = %d)"
+            % postid
+        )
         logger.debug(sql)
         row = db.execute(sql).fetchone()
         if not row:
             return 0
         return row[0]
 
-    def new_category(self, category: str) -> int:
+    def new_category(self, category: str) -> Optional[int]:
         url = "https://www.jianshu.com/author/notebooks"
         data = {"name": category}
 
@@ -275,8 +290,9 @@ class Jianshu:
             for img in imgs:
                 for new_img in new_imgs:
                     if new_img[0] == img:
-                        content = content.replace(img,
-                                                  new_img[1] + "?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240")
+                        content = content.replace(
+                            img, new_img[1] + "?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240"
+                        )
                         new_imgs.remove(new_img)
                         break
 
@@ -290,7 +306,7 @@ class Jianshu:
         resp = self.__get(url, headers=headers)
         return resp.json()["token"], resp.json()["key"]
 
-    async def upload_image(self, path_or_url: str, db) -> Tuple[str, str]:
+    async def upload_image(self, path_or_url: str, db) -> Optional[Tuple[str, str]]:
         if path_or_url.startswith("http"):
             logger.info(f"正在上传远程图片 {path_or_url}")
             url = "https://www.jianshu.com/upload_images/fetch"
@@ -312,7 +328,7 @@ class Jianshu:
                 "token": (None, token),
                 "key": (None, key),
                 "file": (filename, open(path_or_url, "rb")),
-                "x:protocol": "https"
+                "x:protocol": "https",
             }
             resp = requests.post(url, files=params)
         try:

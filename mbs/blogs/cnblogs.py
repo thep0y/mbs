@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: cnblogs.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-05-24 16:30:46
+# @Modified: 2021-06-05 21:02:25
 
 import os
 import sys
@@ -34,22 +34,24 @@ def remove_none(data: dict):
             del data[k]
 
 
-def create_post(title: str,
-                description: str,
-                category: str,
-                enclosure: Optional[Enclosure] = None,
-                link: Optional[str] = None,
-                permalink: Optional[str] = None,
-                postid: Optional[Union[str, int]] = None,
-                source: Optional[Source] = None,
-                userid: Optional[str] = None,
-                mt_allow_comments: Optional[Any] = None,
-                mt_allow_pings: Optional[Any] = None,
-                mt_convert_breaks: Optional[Any] = None,
-                mt_text_more: Optional[str] = None,
-                mt_excerpt: Optional[str] = None,
-                mt_keywords: Optional[str] = None,
-                wp_slug: Optional[str] = None) -> Post:
+def create_post(
+    title: str,
+    description: str,
+    category: str,
+    enclosure: Optional[Enclosure] = None,
+    link: Optional[str] = None,
+    permalink: Optional[str] = None,
+    postid: Optional[Union[str, int]] = None,
+    source: Optional[Source] = None,
+    userid: Optional[str] = None,
+    mt_allow_comments: Optional[Any] = None,
+    mt_allow_pings: Optional[Any] = None,
+    mt_convert_breaks: Optional[Any] = None,
+    mt_text_more: Optional[str] = None,
+    mt_excerpt: Optional[str] = None,
+    mt_keywords: Optional[str] = None,
+    wp_slug: Optional[str] = None,
+) -> Post:
     """创建 post 结构体/字典
 
     Args:
@@ -74,7 +76,7 @@ def create_post(title: str,
         Post: 文章结构体
     """
 
-    categories = ['[Markdown]', f"[随笔分类]{category}"]
+    categories = ["[Markdown]", f"[随笔分类]{category}"]
     post = {
         "dateCreated": datetime.now(),
         "description": description,
@@ -102,6 +104,7 @@ def create_post(title: str,
 
 class CnblogsMetaWeblog:
     """博客园 api"""
+
     key = "cnblogs"
 
     def __init__(self, blog_name: Optional[str] = None, username: Optional[str] = None, password: Optional[str] = None):
@@ -123,11 +126,13 @@ class CnblogsMetaWeblog:
             else:
                 self._server = xml.ServerProxy("https://rpc.cnblogs.com/metaweblog/%s" % blog_name)
                 self._blogger = self._server.blogger
-                self.config = BlogInfo({
-                    "blogName": blog_name,
-                    "username": username,
-                    "password": password,
-                })
+                self.config = BlogInfo(
+                    {
+                        "blogName": blog_name,
+                        "username": username,
+                        "password": password,
+                    }
+                )
                 self._save_blog_config()
         else:
             self._server = xml.ServerProxy("https://rpc.cnblogs.com/metaweblog/%s" % config["blogName"])
@@ -153,8 +158,8 @@ class CnblogsMetaWeblog:
             logger.error(e)
             return
 
-        if len(blog_info):
-            return blog_info[0]
+        if len(blog_info):  # type: ignore
+            return blog_info[0]  # type: ignore
         else:
             return None
 
@@ -210,7 +215,7 @@ class CnblogsMetaWeblog:
         Returns:
             bool: 是或否
         """
-        return list(config.keys()) == ['blogid', 'url', 'blogName']
+        return list(config.keys()) == ["blogid", "url", "blogName"]
 
     def delet_post(self, postid: Union[str, int], recoverable: bool = False):
         """删除文章
@@ -224,8 +229,9 @@ class CnblogsMetaWeblog:
         """
         if isinstance(postid, int):
             postid = str(postid)
-        return self._blogger.deletePost(self.config.blogName, postid, self.config.username, self.config.password,
-                                        recoverable)
+        return self._blogger.deletePost(
+            self.config.blogName, postid, self.config.username, self.config.password, recoverable
+        )
 
     async def edit_post(self, postid: Union[str, int], post: Post, publish: bool = True):
         """编辑文章
@@ -255,15 +261,18 @@ class CnblogsMetaWeblog:
         Returns:
             list: 所有分类的详细信息
         """
-        resp_categories = self._meta_weblog.getCategories(self.config.blogid, self.config.username,
-                                                          self.config.password)
+        resp_categories = self._meta_weblog.getCategories(
+            self.config.blogid, self.config.username, self.config.password
+        )
         categories = []
-        for category in resp_categories:
+        for category in resp_categories:  # type: ignore
             if category["title"].startswith("[随笔分类]"):
-                categories.append({
-                    "id": category["categoryid"],
-                    "name": category["title"].replace("[随笔分类]", ""),
-                })
+                categories.append(
+                    {
+                        "id": category["categoryid"],
+                        "name": category["title"].replace("[随笔分类]", ""),
+                    }
+                )
         return categories
 
     def get_post(self, postid: Union[str, int]):
@@ -310,8 +319,9 @@ class CnblogsMetaWeblog:
             }
         file_data = FileData(fd)
         try:
-            return self._meta_weblog.newMediaObject(self.config.blogid, self.config.username, self.config.password,
-                                                    dict(file_data))
+            return self._meta_weblog.newMediaObject(
+                self.config.blogid, self.config.username, self.config.password, dict(file_data)
+            )
         except Fault as e:
             logger.error(e)
 
@@ -325,25 +335,24 @@ class CnblogsMetaWeblog:
             str: 文章 id
         """
         logger.debug(f"正在向分类 [ {post.categories} ] 中创建新文章 {post.title}")
-        id_ = int(
+        id_ = int(  # type: ignore
             self._meta_weblog.newPost(
                 self.config.blogid,
                 self.config.username,
                 self.config.password,
                 dict(post),
                 True,
-            ))
+            )
+        )
 
         logger.info(f"新文章《{post.title}》已上传到 {self}")
 
         db.update_new_post(post.title, cnblogs_id=id_)
         return self.key, id_
 
-    def new_category(self,
-                     name: str,
-                     parent_id: int = -4,
-                     slug: Optional[str] = None,
-                     description: Optional[str] = None):
+    def new_category(
+        self, name: str, parent_id: int = -4, slug: Optional[str] = None, description: Optional[str] = None
+    ):
         """新建分类
 
         Args:
