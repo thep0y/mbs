@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: __init__.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-10-13 09:39:36
+# @Modified: 2021-10-14 11:34:10
 
 import json
 import sys
@@ -178,7 +178,7 @@ def main() -> int:
 
             if not changed_files and not not_uploaded_posts:
                 print(f'┌{"─"*24}┐')
-                print(ds.format_with_one_style("│  所有文章都已是最新版  │", ds.foreground_color.green))
+                print("│  %s  │" % ds.format_with_one_style("所有文章都已是最新版", ds.foreground_color.green))
                 print(f'└{"─"*24}┘')
                 return 0
 
