@@ -4,19 +4,20 @@
 # @Email: thepoy@163.com
 # @File Name: __init__.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-06-05 20:39:05
+# @Modified: 2021-10-13 09:39:36
 
+import json
 import sys
 import asyncio
 import argparse
+from typing import Any, Dict
 
 from colort import display_style as ds
 
 from mbs.utils.common import read_post_from_file, get_md5_of_file
 from mbs.manager import AllBlogsManager
-from mbs.blogs.site import Site
 from mbs.utils.logger import logger, child_logger
-from mbs.utils.settings import STATUS
+from mbs.utils.settings import CONFIG_FILE_PATH, STATUS
 
 main_logger = child_logger(__name__)
 
@@ -31,13 +32,7 @@ def _merge_scan_result(not_uploaded_posts, changed_files):
             exists = False
             for p in not_uploaded_posts:
                 if f[0] == p[0]:
-                    file = (
-                        f[0],
-                        f[1] * p[1],
-                        f[2] * p[2],
-                        f[3] * p[3],
-                        f[4],
-                    )
+                    file = (f[0], f[1] * p[1], f[2] * p[2], f[3] * p[3], f[4])
                     not_uploaded_posts.remove(p)
                     files.append(file)
                     exists = True
@@ -62,6 +57,7 @@ def _build_parser():
     parser.add_argument("-sc", "--scan-updated-files", help="扫描所有需要更新的文档", action="store_true")
     parser.add_argument("-uo", "--update-one", metavar="PATH", help="更新一个文件", type=str)
     parser.add_argument("-ua", "--update-all", help="更新指定目录中的所有文件", action="store_true")
+    parser.add_argument("--update-jianshu-cookies", help="更新简书 cookies", action="store_true")
     return parser
 
 
@@ -106,7 +102,8 @@ def print_updated_result(files):
     path_right_space = (path_space_length - int(path_space_length / 2)) * " "
 
     print(
-        f"│{' '*no_len}│{title_left_space}{title}{title_right_space}│ {jianshu} │ {cnblogs} │ {sf} │{path_left_space}{path}{path_right_space}│"
+        f"│{' '*no_len}│{title_left_space}{title}{title_right_space}│ {jianshu} │ {cnblogs} │ {sf}"
+        f" │{path_left_space}{path}{path_right_space}│"
     )
     print(f"├{'─'*(no_len)}┼{'─'*(title_width)}┼{'─'*6}┼{'─'*8}┼{'─'*6}┼{'─'*path_width}┤")
 
@@ -124,7 +121,8 @@ def print_updated_result(files):
         item_path_space = (path_width - string_length(files[i][4])) * " "
 
         print(
-            f"│{no}│{item_title}{item_title_space}│  {item_jianshu_status}   │   {item_cnblogs_status}    │  {item_sf_status}   │{files[i][4]}{item_path_space}│"
+            f"│{no}│{item_title}{item_title_space}│  {item_jianshu_status}   │   {item_cnblogs_status}    │ "
+            f" {item_sf_status}   │{files[i][4]}{item_path_space}│"
         )
 
     print(f'└{"─" * 6}┴{"─"*title_width}┴{"─"*6}┴{"─"*8}┴{"─"*6}┴{"─"*(path_width)}┘')
@@ -134,9 +132,9 @@ def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
 
-    manager = AllBlogsManager()
-
     with logger:
+        manager = AllBlogsManager()
+
         if args.categories:
             print("*" * 60)
             for i in manager.db.get_categories():
@@ -157,8 +155,8 @@ def main() -> int:
 
             asyncio.run(manager.new_post(category, title, content, md5, file_path))
 
-            site = Site()
-            site.new_post(file_path)
+            # site = Site()
+            # site.new_post(file_path)
 
             return 0
 
@@ -196,20 +194,32 @@ def main() -> int:
             md5 = get_md5_of_file(args.update_one)
             asyncio.run(manager.update_post(title, content, md5))
 
-            site = Site()
-            site.new_post(args.update_one)
+            # site = Site()
+            # site.new_post(args.update_one)
 
             return 0
 
         if args.update_all:
             changed_files = asyncio.run(manager.update_all_posts())
 
-            if changed_files:
-                site = Site()
-                for path in changed_files:
-                    site.new_post(path)
+            # if changed_files:
+            #     site = Site()
+            #     for path in changed_files:
+            #         site.new_post(path)
 
             return 0
+
+        if args.update_jianshu_cookies:
+            cookies = input("请输入 cookies:")
+
+            cookies = {i.split("=")[0]: i.split("=")[1] for i in cookies.split("; ")}
+
+            with open(CONFIG_FILE_PATH, "r+") as f:
+                all_config: Dict[str, Any] = json.loads(f.read())
+                all_config["jianshu"]["cookies"] = cookies
+                f.seek(0, 0)
+                f.write(json.dumps(all_config))
+                f.truncate()
 
         return 1
 

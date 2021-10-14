@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: manager.py
 # @Created:  2021-04-13 14:57:51
-# @Modified: 2021-06-05 21:00:33
+# @Modified: 2021-10-14 11:17:39
 
 import sys
 import time
@@ -16,8 +16,8 @@ from mbs.blogs.cnblogs import create_post, CnblogsMetaWeblog
 from mbs.blogs.jianshu import Jianshu
 from mbs.blogs.segmentfault import SegmentFault
 from mbs.utils.common import read_post_from_file, parse_cookies, remove_yaml_header, get_md5_of_file
-from mbs.utils.database import DataBase
-from mbs.utils.exceptions import ConfigFileNotFoundError, CookiesExpiredError
+from mbs.utils.database.sqlite import DataBase
+from mbs.utils.exceptions import ConfigFileNotFoundError, CookiesExpiredError, ConfigFileIsNull
 from mbs.utils.logger import child_logger
 from mbs.utils.settings import YES_CODE, NO_CODE, UPDATED_CODE
 
@@ -34,32 +34,26 @@ def input_auth_info_of_cnblogs() -> CnblogsMetaWeblog:
 class AllBlogsManager:
     """博客管理器"""
 
-    try:
-        jianshu = Jianshu()
-    except ConfigFileNotFoundError:
-        print("没有找到配置文件，需要输入认证信息来生成配置文件")
-        cookies = input("请输入已登录的简书 cookies：")
-        jianshu = Jianshu(parse_cookies(cookies))
-
-        cnblogs = input_auth_info_of_cnblogs()
-
-        # TODO: token 好像就是 cookie 中的  PHPSESSIONID
-        cookies = input("请输入思否的 cookies:")
-        token = input("请输入思否的 token:")
-        sf = SegmentFault(
-            {
-                "cookie": cookies,
-                "token": token,
-            }
-        )
-
-    else:
-        cnblogs = CnblogsMetaWeblog()
-        sf = SegmentFault()
-
-    db = DataBase()
-
     def __init__(self):
+        try:
+            self.jianshu = Jianshu()
+        except (ConfigFileNotFoundError, ConfigFileIsNull, FileNotFoundError):
+            print("没有找到配置文件，需要输入认证信息来生成配置文件")
+            cookies = input("请输入已登录的简书 cookies：")
+            self.jianshu = Jianshu(parse_cookies(cookies))
+
+            self.cnblogs = input_auth_info_of_cnblogs()
+
+            # TODO: token 好像就是 cookie 中的  PHPSESSIONID
+            cookies = input("请输入思否的 cookies:")
+            token = input("请输入思否的 token:")
+            self.sf = SegmentFault({"cookie": cookies, "token": token})
+        else:
+            self.cnblogs = CnblogsMetaWeblog()
+            self.sf = SegmentFault()
+
+        self.db = DataBase()
+
         try:
             self.sync_categories()
         except CookiesExpiredError:
@@ -234,6 +228,10 @@ class AllBlogsManager:
             jcs = self.jianshu.get_categories()
             ccs = self.cnblogs.get_categories()
 
+            if not jcs or not ccs:
+                logger.error("获取分类列表失败")
+                break
+
             jcs_set = {i["name"] for i in jcs}
             ccs_set = {i["name"] for i in ccs}
 
@@ -249,10 +247,14 @@ class AllBlogsManager:
                 logger.info("已同步所有分类")
                 break
 
-        jcs = {i["name"]: i["id"] for i in jcs}
-        ccs = {i["name"]: i["id"] for i in ccs}
-        for k, v in jcs.items():
-            self.db.insert_category(k, v, ccs[k])
+        if jcs and ccs:
+            jcs = {i["name"]: i["id"] for i in jcs}
+            ccs = {i["name"]: i["id"] for i in ccs}
+            for k, v in jcs.items():
+                if self.db.select_category(k):
+                    self.db.update_category(k, v, ccs[k])
+                else:
+                    self.db.insert_category(k, v, ccs[k])
 
     def find_all_not_uploaded_posts(self):
         records = self.db.select_all_not_uploaded_posts()

@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: jianshu.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-06-05 21:50:36
+# @Modified: 2021-10-14 11:09:58
 
 import os
 import json
@@ -20,6 +20,7 @@ from mbs.utils.structs.jianshu import Category, NewCategory, Created, Updated, P
 
 from mbs.utils.settings import CONFIG_FILE_PATH
 from mbs.utils.logger import child_logger
+from mbs.utils.exceptions import ConfigFileIsNull, ConfigFileNotFoundError
 
 Categories = List[Category]
 
@@ -68,16 +69,24 @@ class Jianshu:
     def __read_config_from_file(self):
         try:
             with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
-                self.cookies = json.loads(f.read())[self.key]["cookies"]
+                content = f.read()
+                if not content:
+                    raise ConfigFileIsNull("配置文件为空")
+                self.cookies = json.loads(content)[self.key]["cookies"]
             return 0
         except FileNotFoundError:
-            logger.error("config file is not found, you should input the cookies of jianshu to create config file.")
-            return 1
+            raise ConfigFileNotFoundError(
+                "config file is not found, you should input the cookies of jianshu to create config file."
+            )
 
     def __save_config_to_local_file(self):
         try:
             with open(CONFIG_FILE_PATH, "r+") as f:
-                all_config = json.loads(f.read())
+                content = f.read()
+                if not content:
+                    all_config = {}
+                else:
+                    all_config = json.loads(content)
                 all_config.update({self.key: {"cookies": self.cookies}})
                 f.seek(0, 0)
                 f.write(json.dumps(all_config))
@@ -111,25 +120,14 @@ class Jianshu:
         if resp.status_code == 200:
             categories = []
             for i in resp.json():
-                categories.append(
-                    Category(
-                        {
-                            "id": i["id"],
-                            "name": i["name"],
-                        }
-                    )
-                )
+                categories.append(Category({"id": i["id"], "name": i["name"]}))
             return categories
-        logger.error("cookie 已过期：", resp.json())
+        logger.error(f"cookie 已过期：{resp.json()}")
 
     def __create_new_post(self, notebook_id: Union[str, int], title: str) -> Optional[BaseStruct]:
         url = "https://www.jianshu.com/author/notes"
 
-        data = {
-            "notebook_id": str(notebook_id),
-            "title": title,
-            "at_bottom": False,
-        }
+        data = {"notebook_id": str(notebook_id), "title": title, "at_bottom": False}
         logger.debug(f"正在向文集 [ {notebook_id} ] 中创建新文章：{title}")
         resp = self.__post(url, data)
         return parse_response(Created, resp)
@@ -223,12 +221,12 @@ class Jianshu:
         logger.error(f"没有找到 postid={postid} 的文章")
 
     def __select_category_for_post(self, postid: int):
-        from mbs.utils.database import DataBase
+        from mbs.utils.database.sqlite import DataBase
 
         db = DataBase()
         sql = (
-            "SELECT c.jianshu_id FROM categories as c WHERE c.id = (SELECT p.category_id FROM posts p WHERE p.jianshu_id = %d)"
-            % postid
+            "SELECT c.jianshu_id FROM categories as c WHERE c.id = (SELECT p.category_id FROM posts p WHERE"
+            " p.jianshu_id = %d)" % postid
         )
         logger.debug(sql)
         row = db.execute(sql).fetchone()
@@ -321,6 +319,8 @@ class Jianshu:
             filename = os.path.basename(path_or_url).replace(" ", "_")
 
             token, key = self.__get_token_and_key_of_local_image(filename)
+
+            print(token)
 
             # 根据 token 和 key 上传图片
             url = "https://upload.qiniup.com/"

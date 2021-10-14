@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: cnblogs.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-06-05 21:02:25
+# @Modified: 2021-06-19 23:06:29
 
 import os
 import sys
@@ -126,13 +126,7 @@ class CnblogsMetaWeblog:
             else:
                 self._server = xml.ServerProxy("https://rpc.cnblogs.com/metaweblog/%s" % blog_name)
                 self._blogger = self._server.blogger
-                self.config = BlogInfo(
-                    {
-                        "blogName": blog_name,
-                        "username": username,
-                        "password": password,
-                    }
-                )
+                self.config = BlogInfo({"blogName": blog_name, "username": username, "password": password})
                 self._save_blog_config()
         else:
             self._server = xml.ServerProxy("https://rpc.cnblogs.com/metaweblog/%s" % config["blogName"])
@@ -171,7 +165,10 @@ class CnblogsMetaWeblog:
         """
         try:
             with open(CONFIG_FILE_PATH, "r") as f:
-                return json.loads(f.read()).get("cnblogs", None)
+                content = f.read()
+                if not content:
+                    return None
+                return json.loads(content).get("cnblogs", None)
         except FileNotFoundError:
             return None
 
@@ -267,12 +264,7 @@ class CnblogsMetaWeblog:
         categories = []
         for category in resp_categories:  # type: ignore
             if category["title"].startswith("[随笔分类]"):
-                categories.append(
-                    {
-                        "id": category["categoryid"],
-                        "name": category["title"].replace("[随笔分类]", ""),
-                    }
-                )
+                categories.append({"id": category["categoryid"], "name": category["title"].replace("[随笔分类]", "")})
         return categories
 
     def get_post(self, postid: Union[str, int]):
@@ -312,11 +304,7 @@ class CnblogsMetaWeblog:
         # TODO: 如果是远程图片，需要下载到本地后再上传
 
         with open(file_path, "rb") as fb:
-            fd = {
-                "bits": fb.read(),
-                "name": os.path.basename(file_path),
-                "type": mimetypes.guess_type(file_path)[0],
-            }
+            fd = {"bits": fb.read(), "name": os.path.basename(file_path), "type": mimetypes.guess_type(file_path)[0]}
         file_data = FileData(fd)
         try:
             return self._meta_weblog.newMediaObject(
@@ -336,13 +324,7 @@ class CnblogsMetaWeblog:
         """
         logger.debug(f"正在向分类 [ {post.categories} ] 中创建新文章 {post.title}")
         id_ = int(  # type: ignore
-            self._meta_weblog.newPost(
-                self.config.blogid,
-                self.config.username,
-                self.config.password,
-                dict(post),
-                True,
-            )
+            self._meta_weblog.newPost(self.config.blogid, self.config.username, self.config.password, dict(post), True)
         )
 
         logger.info(f"新文章《{post.title}》已上传到 {self}")
@@ -364,12 +346,7 @@ class CnblogsMetaWeblog:
         Returns:
             bool: 是否成功创建
         """
-        wp = {
-            "name": name,
-            "parent_id": parent_id,
-            "slug": slug,
-            "description": description,
-        }
+        wp = {"name": name, "parent_id": parent_id, "slug": slug, "description": description}
         remove_none(wp)
         wp = WpCategory(wp)
         return self._wp.newCategory(self.config.blogid, self.config.username, self.config.password, dict(wp))

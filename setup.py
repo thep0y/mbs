@@ -15,9 +15,9 @@ with codecs.open("README.md", "r", "utf-8") as fd:
     setup(
         name="mbs-cn",
         version=mbs.__version__,
-        description='''
+        description="""
         博客管理器，可以管理多个博客的文章
-        ''',
+        """,
         long_description_content_type="text/markdown",
         long_description=fd.read(),
         author="thepoy",
@@ -27,12 +27,16 @@ with codecs.open("README.md", "r", "utf-8") as fd:
         keywords="blog 博客 博客园 简书",
         packages=find_packages(),
         entry_points={
-            'console_scripts': [
-                'mbs = mbs:run_main',
+            "console_scripts": [
+                "mbs = mbs:run_main",
             ],
         },
         install_requires=[
             "requests",
             "colorful-logger",
         ],
+        extras_require={
+            "all": {"psycopg2"},
+            "pg": ["psycopg2"],
+        },
     )

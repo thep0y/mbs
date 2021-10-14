@@ -4,8 +4,9 @@
 # @Email: thepoy@163.com
 # @File Name: __init__.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-06-05 21:11:52
+# @Modified: 2021-10-13 11:15:59
 
+from abc import ABC, abstractmethod
 import json
 
 import requests
@@ -31,9 +32,7 @@ class BaseBlog:
     }
 
 
-class LoginedBaseBlog(BaseBlog):
-    key: Optional[str] = None
-
+class LoginedBaseBlog(ABC, BaseBlog):
     def __init__(self, auth_dict: dict = None):
         if not self.key:
             raise NotImplementedError("key must be a `str`, not `None`")
@@ -88,10 +87,7 @@ class LoginedBaseBlog(BaseBlog):
         if data:
             return requests.post(url, headers=headers, json=data)
         else:
-            return requests.post(
-                url,
-                headers=headers,
-            )
+            return requests.post(url, headers=headers)
 
     def _put(self, url: str, data: Optional[dict], headers: Optional[dict] = None) -> Response:
         if not headers:
@@ -99,14 +95,18 @@ class LoginedBaseBlog(BaseBlog):
 
         return requests.put(url, headers=headers, json=data)
 
-    def get_post(self, postid: Union[str, int]) -> str:  # type: ignore
+    @abstractmethod
+    def get_post(self, postid: Union[str, int]) -> str:
         pass
 
-    def new_post(self, title: str, content: str, *args) -> str:  # type: ignore
+    @abstractmethod
+    def new_post(self, title: str, content: str, *args) -> str:
         pass
 
+    @abstractmethod
     def update_post(self, postid: Union[str, int], content: str, title: Optional[str] = None):
         pass
 
+    @abstractmethod
     def delete_post(self, postid: Union[str, int]) -> Optional[dict]:
         pass

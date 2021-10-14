@@ -4,7 +4,7 @@
 # @Email: thepoy@163.com
 # @File Name: segmentfault.py
 # @Created: 2021-04-07 09:00:26
-# @Modified: 2021-06-05 21:12:45
+# @Modified: 2021-10-14 11:00:40
 
 import asyncio
 import sys
@@ -23,10 +23,7 @@ class SegmentFault(LoginedBaseBlog):
     def _input_auth_info(self) -> Dict[str, str]:
         cookie = input("输入思否 cookie：\n")
         token = input("输入思否 token：\n")
-        return {
-            "cookie": cookie,
-            "token": token,
-        }
+        return {"cookie": cookie, "token": token}
 
     def get_post(self, postid: Union[str, int]) -> Optional[str]:
         url = f"https://gateway.segmentfault.com/article?query=prepare&draft_id=&id={postid}&freshman=1"
@@ -39,12 +36,7 @@ class SegmentFault(LoginedBaseBlog):
             return None
 
     async def update_post(
-        self,
-        postid: Union[str, int],
-        content: str,
-        db,
-        tags_str: List[str] = None,
-        title: Optional[str] = None,
+        self, postid: Union[str, int], content: str, db, tags_str: List[str] = None, title: Optional[str] = None
     ) -> bool:
         revisions = self._revisions(int(postid))
         logger.debug(f"最新版本：{revisions}")
@@ -197,6 +189,9 @@ class SegmentFault(LoginedBaseBlog):
             return tags
         except AttributeError:
             return None
+
+    def delete_post(self):
+        pass
 
     def __str__(self):
         return "思否"

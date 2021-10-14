@@ -4,11 +4,10 @@
 # @Email: thepoy@163.com
 # @File Name: site.py
 # @Created: 2021-05-13 16:40:03
-# @Modified: 2021-06-05 21:15:33
+# @Modified: 2021-08-02 06:54:13
 
 import json
 import os
-import sys
 import time
 import re
 import uuid
@@ -62,7 +61,8 @@ class Site:
                 self.target_folder = auth_info[self.key]["target_folder"]
         except FileNotFoundError:
             logger.error(
-                "config file is not found, you should input host, user, password and target folder to create config file."
+                "config file is not found, you should input host, user, password and target folder to create config"
+                " file."
             )
             self.__input_auth_info()
         except KeyError:
@@ -116,15 +116,22 @@ class Site:
         basename = os.path.basename(path)
         remote_file_name = basename.replace(" ", "-")
 
+        u: Optional[str] = None
+
         for md in mds:
             # 更新
             if md[11:] == remote_file_name:
-                logger.info(f"服务器中已有文件 {md}，从服务器文件取获取 key")
                 remote_file_name = md
+
+                if not self.sftp:
+                    raise Exception("与服务器连接失败")
                 f = self.sftp.open(os.path.join(self.target_folder, remote_file_name))
                 lines = f.readlines()
+                if not len(lines):
+                    break
+                logger.info(f"服务器中已有文件 {md}，从服务器文件取获取 key")
                 # 更新文章时从远程文件中取 key，key 可能在第四行或第五行
-                key_line = lines[3]
+                key_line: str = lines[3]
                 logger.debug("第四行 -- " + key_line)
                 if not key_line.startswith("key: "):
                     key_line = lines[4]
@@ -155,12 +162,13 @@ class Site:
 
             # 创建文章时，创建新的 key
             u = uuid.uuid4().hex
-        else:
+
+        if not u:
             logger.fatal("无法辨别更新还是新建")
 
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
-            content = re.sub(r"^key: ?$", f"key: {u}", content, flags=re.MULTILINE) # type: ignore
+            content = re.sub(r"^key: ?$", f"key: {u}", content, flags=re.MULTILINE)  # type: ignore
             with open(f"/tmp/{remote_file_name}", "w", encoding="utf-8") as nf:
                 nf.write(content)
 
